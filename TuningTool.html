@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>SOIPDT & Super-Twisting Algorithm </title>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <style>
+        :root {
+            --bg: #ececec;
+            --panel: #1a1a1a;
+            --text: #d0d0d0;
+            --primary: #00a8ff;
+            --success: #4cd137;
+            --danger: #e84118;
+            --warning: #f1c40f;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 10px;
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            grid-template-rows: auto 1fr;
+            height: 100vh;
+            gap: 8px;
+            box-sizing: border-box;
+        }
+
+        header {
+            grid-column: span 2;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--panel);
+            padding: 8px 20px;
+            border-radius: 6px;
+            border: 1px solid #333;
+        }
+
+        .sidebar {
+            background: var(--panel);
+            padding: 12px;
+            border-radius: 6px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            border: 1px solid #333;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-auto-rows: 240px;
+            gap: 8px;
+            overflow-y: auto;
+        }
+
+        .chart-container {
+            background: var(--panel);
+            border-radius: 6px;
+            border: 1px solid #222;
+            padding: 4px;
+        }
+
+        .control-group {
+            border: 1px solid #333;
+            padding: 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.01);
+        }
+
+        .control-group h3 {
+            margin: 0 0 8px 0;
+            font-size: 0.75rem;
+            color: var(--primary);
+            text-transform: uppercase;
+        }
+
+        .input-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .control-slider {
+            margin-bottom: 8px;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: #999;
+            margin-bottom: 2px;
+        }
+
+        .slider-label b {
+            color: var(--primary);
+        }
+
+        input[type=range] {
+            width: 100%;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            appearance: none;
+            outline: none;
+            margin: 4px 0;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            background: var(--primary);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        label {
+            font-size: 0.7rem;
+            color: #999;
+        }
+
+        input {
+            background: #222;
+            border: 1px solid #444;
+            color: white;
+            padding: 3px 6px;
+            border-radius: 3px;
+            width: 65px;
+            text-align: right;
+            font-size: 0.8rem;
+        }
+
+        button {
+            cursor: pointer;
+            padding: 6px 12px;
+            border-radius: 4px;
+            border: none;
+            font-weight: bold;
+            font-size: 0.8rem;
+        }
+
+        .btn-connect { background: var(--primary); color: white; }
+        .btn-update { background: var(--success); color: white; width: 100%; margin-top: 5px; }
+        .stat-line { font-size: 0.65rem; color: #666; margin-top: 2px; }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div style="display:flex; align-items:center; gap:15px;">
+            <h2 style="margin:0; font-size:1.1rem; color:var(--primary);">SOIPDT CONTROL</h2>
+            <button id="connectBtn" class="btn-connect">CONNECT SERIAL</button>
+            <span id="serialStatus" style="font-size:0.7rem; font-weight:bold; color:var(--danger)">OFFLINE</span>
+        </div>
+        <div style="font-size:0.7rem;">Packets: <span id="stat-rx">0</span> | CRC Err: <span id="stat-err">0</span>
+        </div>
+    </header>
+
+    <div class="sidebar">
+        <div class="control-group">
+            <h3>Control Mode</h3>
+            <div class="input-row">
+                <label>Mode</label>
+                <select id="in-mode" style="background:#222; color:white; border:1px solid #444; font-size:0.7rem;">
+                    <option value="1">AUTO (Depth)</option>
+                    <option value="0">MANUAL (Alpha)</option>
+                </select>
+            </div>
+            <div id="row-dtar" class="input-row"><label>Target Depth (mm)</label><input type="number" step="0.01" id="in-dtar" value="100"></div>
+            <div id="row-alpha" class="input-row" style="display:none;"><label>Manual Alpha (deg)</label><input type="number" step="0.01" id="in-alpha" value="20.0"></div>
+            <div class="stat-line" id="preview-alpha">Predicted Alpha: --</div>
+        </div>
+
+        <div class="control-group">
+            <h3>Plant Model (SOIPDT)</h3>
+            <div class="input-row"><label>Gain K</label><input type="number" step="0.01" id="in-K" value="1.0"></div>
+            <div class="input-row"><label>Tau 1</label><input type="number" step="0.01" id="in-t1" value="5.0"></div>
+            <div class="input-row"><label>Delay L</label><input type="number" step="0.01" id="in-L" value="1.0"></div>
+            <div class="input-row"><label>Lift Offset</label><input type="number" step="0.01" id="in-liftOffset" value="150.0"></div>
+            <div class="input-row"><label>Tail Offset</label><input type="number" step="0.01" id="in-tailOffset" value="150.0"></div>
+        </div>
+
+        <div class="control-group">
+            <h3>Filters Cutoff (Hz)</h3>
+            <div class="control-slider">
+                <div class="slider-label"><span>Lifting fc</span><b id="val-fcL">25</b></div>
+                <input type="range" min="1" max="100" step="1" id="in-fcL" value="25" oninput="document.getElementById('val-fcL').innerText=this.value">
+            </div>
+            <div class="control-slider">
+                <div class="slider-label"><span>Tailboard fc</span><b id="val-fcT">25</b></div>
+                <input type="range" min="1" max="100" step="1" id="in-fcT" value="25" oninput="document.getElementById('val-fcT').innerText=this.value">
+            </div>
+            <div class="control-slider">
+                <div class="slider-label"><span>Ref Filter ω</span><b id="val-omR">20</b></div>
+                <input type="range" min="1" max="100" step="1" id="in-omR" value="20" oninput="document.getElementById('val-omR').innerText=this.value">
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Gains (Super-Twisting)</h3>
+            <div class="control-slider">
+                <div class="slider-label"><span>Kp (Sliding)</span><b id="val-Kp">2.80</b></div>
+                <input type="range" min="0" max="20" step="0.01" id="in-Kp" value="2.80" oninput="document.getElementById('val-Kp').innerText=parseFloat(this.value).toFixed(2)">
+            </div>
+            <div class="control-slider">
+                <div class="slider-label"><span>Ki (Integ)</span><b id="val-Ki">4.0</b></div>
+                <input type="range" min="0" max="20" step="0.01" id="in-Ki" value="4.0" oninput="document.getElementById('val-Ki').innerText=parseFloat(this.value).toFixed(2)">
+            </div>
+            <div class="control-slider">
+                <div class="slider-label"><span>Kd (Deriv)</span><b id="val-Kd">1.00</b></div>
+                <input type="range" min="0" max="20" step="0.01" id="in-Kd" value="1.00" oninput="document.getElementById('val-Kd').innerText=parseFloat(this.value).toFixed(2)">
+            </div>
+            <div class="control-slider">
+                <div class="slider-label"><span>K1 (ST Prop)</span><b id="val-K1">5.00</b></div>
+                <input type="range" min="0" max="50" step="0.1" id="in-K1" value="5.00" oninput="document.getElementById('val-K1').innerText=parseFloat(this.value).toFixed(1)">
+            </div>
+            <div class="control-slider">
+                <div class="slider-label"><span>K2 (ST Integ)</span><b id="val-K2">10.00</b></div>
+                <input type="range" min="0" max="100" step="0.1" id="in-K2" value="10.00" oninput="document.getElementById('val-K2').innerText=parseFloat(this.value).toFixed(1)">
+            </div>
+        </div>
+
+        <div class="control-group" style="background: rgba(0, 168, 255, 0.05); border-color: var(--primary);">
+            <h3 style="color: var(--primary);">Live Math Monitor</h3>
+            <div style="font-size: 0.62rem; display: flex; flex-direction: column; gap: 4px; font-family: 'Consolas', monospace;">
+                <div class="math-row">y_ref (Setpoint): <span id="m-yref" class="var-val">--</span>°</div>
+                <div class="math-row">y_meas (Actual): <span id="m-yactual" class="var-val">--</span>°</div>
+                <div style="border-top: 1px solid #333; margin: 2px 0;"></div>
+                
+                <div class="math-row" style="color: #9c88ff; white-space: nowrap;">
+                    e = <span id="m-e-yref">--</span> - <span id="m-e-ypred">--</span> = <span id="m-e-res" style="font-weight:bold;">--</span>°
+                </div>
+                <div style="font-size: 0.55rem; color: #666; padding-left: 15px;">(y_ref - y_pred)</div>
+
+                <div class="math-row" style="color: var(--warning);">
+                    s = <span id="m-s-val">--</span>
+                </div>
+                <div style="font-size: 0.55rem; color: #666; padding-left: 15px;">(Kp·e + Ki·∫e + Kd·de)</div>
+
+                <div style="border-top: 1px solid #333; margin: 2px 0;"></div>
+                
+                <div class="math-row" style="color: #ffa502;">u_eq = <span id="m-ueq-val">--</span></div>
+                <div class="math-row" style="color: #2ed573;">u_sw = <span id="m-usw-val">--</span> (ST)</div>
+                
+                <div class="math-row" style="font-weight: bold; font-size: 0.7rem; color: var(--danger); border-top: 1px solid #444; padding-top: 4px; white-space: nowrap;">
+                    u = <span id="m-u-ueq">--</span> + <span id="m-u-usw">--</span> = <span id="m-utot-val">--</span>
+                </div>
+                
+                <div style="font-size: 0.55rem; color: #666; font-style: italic; margin-top: 4px; border-top: 1px dotted #333; padding-top: 2px;">
+                    θ (Tailboard): <span id="m-tail">--</span> mm | de: <span id="m-de-val">--</span>°/s
+                </div>
+            </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; margin-top: 5px;">
+            <button id="updateBtn" class="btn-update" style="margin-top:0; flex: 1;">PUSH SETTINGS</button>
+            <label style="font-size: 0.65rem; display: flex; align-items: center; gap: 3px; cursor: pointer; white-space: nowrap;">
+                <input type="checkbox" id="liveSync"> Live
+            </label>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div id="chart-lifting" class="chart-container"></div>
+        <div id="chart-tailboard" class="chart-container"></div>
+        <div id="chart-reference" class="chart-container"></div>
+        <div id="chart-tracking" class="chart-container"></div>
+        <div id="chart-error" class="chart-container"></div>
+        <div id="chart-sliding" class="chart-container"></div>
+        <div id="chart-control" class="chart-container"></div>
+        <div id="chart-ueq" class="chart-container"></div>
+        <div id="chart-usw" class="chart-container"></div>
+    </div>
+
+    <script>
+        let port, reader;
+        let rxCount = 0, errCount = 0;
+        const MAX_POINTS = 300;
+        const data = { al_r: [], al_f: [], th_r: [], th_f: [], sp_r: [], sp_f: [], u: [], e: [], s: [], u_eq: [], u_sw: [] };
+        let lastTailAngle = 0;
+
+        function calculate_alpha_js(depthtarget, tailboardangle) {
+            if (tailboardangle < 0.5) return 0.0;
+            depthtarget = Math.max(40, Math.min(150, depthtarget));
+            const c = [14.8231841565, -2.5728483250, 2.5589109354, 0.0431399228, 0.1178597710, -0.0222313485, 0.0032458064, -0.0068033308, 0.0022842150, 0.0001798013];
+            let a3 = c[6], a2 = c[3] + c[7] * tailboardangle, a1 = c[1] + c[4] * tailboardangle + c[8] * tailboardangle * tailboardangle,
+                a0 = c[0] + c[2] * tailboardangle + c[5] * tailboardangle * tailboardangle + c[9] * Math.pow(tailboardangle, 3);
+            let alpha = 20.0;
+            for (let i = 0; i < 50; i++) {
+                let f = a3 * Math.pow(alpha, 3) + a2 * Math.pow(alpha, 2) + a1 * alpha + (a0 - depthtarget);
+                let df = 3.0 * a3 * Math.pow(alpha, 2) + 2.0 * a2 * alpha + a1;
+                if (Math.abs(df) < 1e-12) break;
+                let delta = f / df;
+                alpha = Math.max(0, Math.min(40, alpha - delta));
+                if (Math.abs(delta) < 1e-8) break;
+            }
+            return alpha;
+        }
+
+        function updatePreview() {
+            const mode = document.getElementById('in-mode').value;
+            if (mode === "1") {
+                const dtar = parseFloat(document.getElementById('in-dtar').value);
+                const pred = calculate_alpha_js(dtar, lastTailAngle);
+                document.getElementById('preview-alpha').innerText = `Predicted Alpha: ${pred.toFixed(2)}°`;
+            } else {
+                const alpha = parseFloat(document.getElementById('in-alpha').value);
+                document.getElementById('preview-alpha').innerText = `Manual Alpha: ${alpha.toFixed(1)}°`;
+            }
+        }
+
+        document.getElementById('in-mode').addEventListener('change', (e) => {
+            const isAuto = e.target.value === "1";
+            document.getElementById('row-dtar').style.display = isAuto ? 'flex' : 'none';
+            document.getElementById('row-alpha').style.display = isAuto ? 'none' : 'flex';
+            updatePreview();
+        });
+        document.querySelectorAll('#in-dtar, #in-alpha').forEach(el => el.addEventListener('input', updatePreview));
+        document.querySelectorAll('input, select').forEach(el => el.addEventListener('input', () => {
+            if (document.getElementById('liveSync').checked) sendCommand();
+        }));
+
+        function createChart(id, title, traces) {
+            Plotly.newPlot(id, traces.map(t => ({ y: [], name: t.name, line: { color: t.color, width: t.w, dash: t.dash || 'solid' } })), {
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                margin: { t: 30, b: 20, l: 40, r: 10 }, font: { color: '#888', size: 9 },
+                xaxis: { showgrid: true, gridcolor: '#222' }, yaxis: { showgrid: true, gridcolor: '#222' },
+                title: { text: title, font: { size: 11, color: '#aaa' } }, showlegend: true, legend: { orientation: 'h', y: 1.1 }
+            }, { responsive: true });
+        }
+
+        function initAllCharts() {
+            createChart('chart-lifting', 'LIFTING SENSOR', [{ name: 'Raw', color: '#555', w: 1 }, { name: 'Filt', color: '#4cd137', w: 2 }]);
+            createChart('chart-tailboard', 'TAILBOARD SENSOR', [{ name: 'Raw', color: '#555', w: 1 }, { name: 'Filt', color: '#f1c40f', w: 2 }]);
+            createChart('chart-reference', 'ALPHA TARGET', [{ name: 'Raw', color: '#555', w: 1 }, { name: 'Ref', color: '#00a8ff', w: 2 }]);
+            createChart('chart-tracking', 'SYSTEM TRACKING', [{ name: 'Ref', color: '#00a8ff', w: 1, dash: 'dash' }, { name: 'Actual', color: '#4cd137', w: 2 }]);
+            createChart('chart-control', 'TOTAL OUTPUT (u)', [{ name: 'u_out', color: '#e84118', w: 1.5 }]);
+            createChart('chart-error', 'TRACKING ERROR (e)', [{ name: 'Error', color: '#9c88ff', w: 1.5 }]);
+            createChart('chart-sliding', 'SLIDING SURFACE (s)', [{ name: 'Sliding', color: '#00cec9', w: 1.5 }]);
+            createChart('chart-ueq', 'EQUIVALENT (u_eq)', [{ name: 'u_eq', color: '#ffa502', w: 1.5 }]);
+            createChart('chart-usw', 'SWITCHING (u_sw)', [{ name: 'u_sw', color: '#2ed573', w: 1.5 }]);
+        }
+
+        async function readLoop() {
+            let buffer = new Uint8Array();
+            const PKT_SIZE = 119; // 2 header + 29*4 floats + 1 checksum
+            try {
+                reader = port.readable.getReader();
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    let newBuf = new Uint8Array(buffer.length + value.length);
+                    newBuf.set(buffer); newBuf.set(value, buffer.length); buffer = newBuf;
+                    while (buffer.length >= PKT_SIZE) {
+                        if (buffer[0] === 0xAA && buffer[1] === 0x55) {
+                            const pkt = buffer.slice(0, PKT_SIZE); buffer = buffer.slice(PKT_SIZE);
+                            const dv = new DataView(pkt.buffer, pkt.byteOffset, pkt.byteLength);
+                            const payload = pkt.slice(2, 118);
+                            let crc = 0; for (let b of payload) crc ^= b;
+                            if (crc === pkt[118]) {
+                                rxCount++; document.getElementById('stat-rx').innerText = rxCount;
+                                const v = []; for (let i = 0; i < 29; i++) v.push(dv.getFloat32(2 + i * 4, true));
+
+                                data.al_r.push(v[0]); data.al_f.push(v[1]);
+                                data.th_r.push(v[2]); data.th_f.push(v[3]);
+                                data.sp_r.push(v[4]); data.sp_f.push(v[5]);
+                                data.u.push(v[10]); data.e.push(v[7]); data.s.push(v[9]);
+                                data.u_eq.push(v[26]); data.u_sw.push(v[27]);
+
+                                lastTailAngle = v[3];
+                                if (rxCount % 10 === 0) {
+                                    updatePreview();
+                                    const y_ref = v[5];
+                                    const e = v[7];
+                                    const y_pred = y_ref - e;
+                                    const u_eq = v[26];
+                                    const u_sw = v[27];
+                                    const u_tot = v[10];
+
+                                    document.getElementById('m-yref').innerText = y_ref.toFixed(2);
+                                    document.getElementById('m-yactual').innerText = v[1].toFixed(2);
+                                    
+                                    // Chi tiết e = y_ref - y_pred
+                                    document.getElementById('m-e-yref').innerText = y_ref.toFixed(2);
+                                    document.getElementById('m-e-ypred').innerText = y_pred.toFixed(2);
+                                    document.getElementById('m-e-res').innerText = e.toFixed(3);
+                                    
+                                    document.getElementById('m-de-val').innerText = v[8].toFixed(2);
+                                    document.getElementById('m-s-val').innerText = v[9].toFixed(4);
+                                    
+                                    document.getElementById('m-ueq-val').innerText = u_eq.toFixed(4);
+                                    document.getElementById('m-usw-val').innerText = u_sw.toFixed(4);
+                                    
+                                    // Chi tiết u = u_eq + u_sw
+                                    document.getElementById('m-u-ueq').innerText = u_eq.toFixed(3);
+                                    document.getElementById('m-u-usw').innerText = u_sw.toFixed(3);
+                                    document.getElementById('m-utot-val').innerText = u_tot.toFixed(3);
+                                    
+                                    document.getElementById('m-tail').innerText = v[3].toFixed(1);
+                                }
+
+                                Object.values(data).forEach(arr => { if (arr.length > MAX_POINTS) arr.shift(); });
+                                if (rxCount % 2 === 0) {
+                                    Plotly.update('chart-lifting', { y: [data.al_r, data.al_f] });
+                                    Plotly.update('chart-tailboard', { y: [data.th_r, data.th_f] });
+                                    Plotly.update('chart-reference', { y: [data.sp_r, data.sp_f] });
+                                    Plotly.update('chart-tracking', { y: [data.sp_f, data.al_f] });
+                                    Plotly.update('chart-control', { y: [data.u] });
+                                    Plotly.update('chart-error', { y: [data.e] });
+                                    Plotly.update('chart-sliding', { y: [data.s] });
+                                    Plotly.update('chart-ueq', { y: [data.u_eq] });
+                                    Plotly.update('chart-usw', { y: [data.u_sw] });
+                                }
+                            } else { errCount++; document.getElementById('stat-err').innerText = errCount; }
+                        } else buffer = buffer.slice(1);
+                    }
+                }
+            } catch (e) { console.error(e); } finally { if (reader) { reader.releaseLock(); reader = null; } }
+        }
+
+        async function sendCommand() {
+            if (!port || !port.writable) return;
+            const vals = [
+                parseFloat(document.getElementById('in-dtar').value), parseFloat(document.getElementById('in-Kp').value),
+                parseFloat(document.getElementById('in-Ki').value), parseFloat(document.getElementById('in-Kd').value),
+                parseFloat(document.getElementById('in-K1').value), parseFloat(document.getElementById('in-K2').value),
+                parseFloat(document.getElementById('in-K').value),
+                parseFloat(document.getElementById('in-t1').value), parseFloat(document.getElementById('in-L').value),
+                parseFloat(document.getElementById('in-fcL').value), parseFloat(document.getElementById('in-fcT').value),
+                parseFloat(document.getElementById('in-omR').value), parseFloat(document.getElementById('in-liftOffset').value),
+                parseFloat(document.getElementById('in-tailOffset').value),
+                parseFloat(document.getElementById('in-mode').value), parseFloat(document.getElementById('in-alpha').value)
+            ];
+            const buf = new ArrayBuffer(67); // 2 header + 16*4 floats + 1 checksum
+            const dv = new DataView(buf); dv.setUint16(0, 0xAA55, true);
+            let crc = 0; const floatBuf = new Uint8Array(buf, 2, 64);
+            for (let i = 0; i < 16; i++) dv.setFloat32(2 + i * 4, vals[i], true);
+            for (let b of floatBuf) crc ^= b; dv.setUint8(66, crc);
+            const writer = port.writable.getWriter(); await writer.write(new Uint8Array(buf)); writer.releaseLock();
+        }
+
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            if (port) { if (reader) await reader.cancel(); await port.close(); port = null; document.getElementById('connectBtn').innerText = "CONNECT SERIAL"; return; }
+            try {
+                port = await navigator.serial.requestPort(); await port.open({ baudRate: 115200 });
+                document.getElementById('connectBtn').innerText = "DISCONNECT SERIAL"; readLoop();
+            } catch (err) { alert("Failed to open serial port"); }
+        });
+        document.getElementById('updateBtn').addEventListener('click', sendCommand);
+        initAllCharts();
+    </script>
+</body>
+</html>
