@@ -163,6 +163,13 @@
         .btn-connect:hover { filter: brightness(1.1); }
         .btn-update { background: var(--success); color: white; width: 100%; }
         .btn-update:hover { filter: brightness(1.1); }
+        .btn-rec { background: var(--danger); color: white; }
+        .btn-rec:hover { filter: brightness(1.1); }
+        .btn-rec.recording { background: #c0392b; animation: pulse-rec 1s infinite; }
+        @keyframes pulse-rec { 0%,100%{opacity:1} 50%{opacity:0.55} }
+        .btn-save { background: #8e44ad; color: white; }
+        .btn-save:hover { filter: brightness(1.1); }
+        .rec-counter { font-size: 0.75rem; color: var(--warning); font-weight: bold; min-width: 80px; }
         
         .stat-line { font-size: 0.7rem; color: #888; margin-top: 4px; }
         
@@ -240,10 +247,14 @@
             <button id="connectBtn" class="btn-connect">CONNECT SERIAL</button>
             <span id="serialStatus" style="font-size:0.75rem; font-weight:bold; color:var(--danger)">OFFLINE</span>
         </div>
-        <div style="font-size:0.8rem; display: flex; gap: 20px;">
+        <div style="font-size:0.8rem; display: flex; gap: 20px; align-items:center;">
             <div>RX: <span id="stat-rx" style="color:var(--success)">0</span></div>
             <div>CRC Err: <span id="stat-err" style="color:var(--danger)">0</span></div>
             <div>Freq: <span id="stat-freq" style="color:var(--warning)">--</span> Hz</div>
+            <div style="width:1px; height:20px; background:var(--border);"></div>
+            <button id="recBtn" class="btn-rec">⏺ REC</button>
+            <span id="recCounter" class="rec-counter">0 rows</span>
+            <button id="saveBtn" class="btn-save" style="display:none;">💾 SAVE CSV</button>
         </div>
     </header>
 
@@ -376,6 +387,73 @@
         let rxCount = 0, errCount = 0, lastTime = Date.now();
         const MAX_POINTS = 500;
         const startTime = Date.now();
+
+        // ── CSV Recording ────────────────────────────────────────────────
+        let csvRows = [];       // mỗi phần tử là 1 mảng số thô
+        let isRecording = false;
+        let recUpdateTimer = null;
+        let recStartTime = 0;  // timestamp lúc nhấn REC (ms)
+
+        const CSV_HEADER = [
+            'time_s',
+            'lift_raw','lift_filt','tail_raw','tail_filt','sp_raw','sp_ref',
+            'depth_target','e','de','s','u',
+            'Kp','Ki','Kd','K1','K2',
+            'K','tau1','L',
+            'fc_lift','fc_tail','omega_ref',
+            'lift_offset','tail_offset','is_auto','alpha_manual',
+            'u_eq','u_sw','u_sw_i','est_depth','dot_alpha_ref','ddot_alpha_ref'
+        ].join(',');
+
+        function toggleRecording() {
+            if (!isRecording) {
+                // Bắt đầu ghi
+                csvRows = [];
+                recStartTime = Date.now();
+                isRecording = true;
+                document.getElementById('recBtn').textContent = '⏹ STOP';
+                document.getElementById('recBtn').classList.add('recording');
+                document.getElementById('saveBtn').style.display = 'none';
+                document.getElementById('recCounter').textContent = '0 rows';
+                // Cập nhật counter mỗi 500ms thay vì mỗi packet (tránh DOM spam)
+                recUpdateTimer = setInterval(() => {
+                    document.getElementById('recCounter').textContent = csvRows.length.toLocaleString() + ' rows';
+                }, 500);
+            } else {
+                // Dừng ghi
+                isRecording = false;
+                clearInterval(recUpdateTimer);
+                recUpdateTimer = null;
+                document.getElementById('recBtn').textContent = '⏺ REC';
+                document.getElementById('recBtn').classList.remove('recording');
+                document.getElementById('recCounter').textContent = csvRows.length.toLocaleString() + ' rows';
+                if (csvRows.length > 0) {
+                    document.getElementById('saveBtn').style.display = '';
+                }
+            }
+        }
+
+        function saveCSV() {
+            if (csvRows.length === 0) return;
+
+            // Build CSV nhanh bằng join thay vì string concat
+            const lines = [CSV_HEADER];
+            for (const row of csvRows) {
+                lines.push(row.join(','));
+            }
+            const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+
+            // Tạo tên file theo timestamp
+            const now = new Date();
+            const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`
+                     + `_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
+            const filename = `tractor_log_${ts}.csv`;
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = filename; a.click();
+            URL.revokeObjectURL(url);
+        }
 
         // ── Circular buffer (tránh shift O(n)) ──────────────────────────
         class CircBuf {
@@ -596,6 +674,20 @@
                             buf.dtar.push(v[6]);    buf.depth.push(v[29]);
                             buf.depth_e.push(v[6] - v[29]);
 
+                            // ── Ghi CSV nếu đang record ──────────────────
+                            if (isRecording) {
+                                const _n = new Date();
+                                const timestamp =
+                                    String(_n.getHours()).padStart(2,'0') + ':' +
+                                    String(_n.getMinutes()).padStart(2,'0') + ':' +
+                                    String(_n.getSeconds()).padStart(2,'0') + ':' +
+                                    String(_n.getMilliseconds()).padStart(3,'0');
+                                const row = new Array(33);
+                                row[0] = timestamp;
+                                for (let i = 0; i < 32; i++) row[i+1] = v[i].toFixed(6);
+                                csvRows.push(row);
+                            }
+
                             // ── Update UI mỗi 5 packet (100ms) ──────────
                             if (rxCount % 5 === 0) {
                                 const now = Date.now();
@@ -699,6 +791,8 @@
         });
 
         document.getElementById('updateBtn').addEventListener('click', sendCommand);
+        document.getElementById('recBtn').addEventListener('click', toggleRecording);
+        document.getElementById('saveBtn').addEventListener('click', saveCSV);
         initCharts();
         initMath();
     </script>
