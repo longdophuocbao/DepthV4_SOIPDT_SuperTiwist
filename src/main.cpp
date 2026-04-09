@@ -27,7 +27,7 @@
  */
 
 #define DEBUG_SERIAL // tuning by serial
-#define MONITOR_WIFI // monitor by wifi
+// #define MONITOR_WIFI // monitor by wifi
 
 #include <Arduino.h>
 
@@ -428,7 +428,7 @@ void runController()
 
     // Super-Twisting Algorithm cho hệ gain âm (b < 0):
     // u_sw_int tích lũy cùng dấu với s để khi chia cho b_Kd (âm) sẽ ra u cùng chiều cần thiết
-    u_sw_int = constrain(u_sw_int + K2 * sign_s * DT, -2.0f, 2.0f);
+    u_sw_int = constrain(u_sw_int - K2 * sign_s * DT, -2.0f, 2.0f);
 
     float u_sw = 0.0f;
     float b_Kd = b * safe_Kd;
@@ -466,7 +466,7 @@ void sensorReadTask(void *param)
     while (true)
     {
         float lifting_raw = g_lift_offset - readLiftingSensorRaw();
-        float tail_raw = g_tail_offset - readTailboardSensorRaw();
+        float tail_raw =  readTailboardSensorRaw() - g_tail_offset;
         g_lifting_filtered = filterLifting.update(lifting_raw);
         g_tail_filtered = filterTailboard.update(tail_raw);
         g_lifting_raw_val = lifting_raw;
