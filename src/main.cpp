@@ -426,7 +426,7 @@ void runController()
 
     // Super-Twisting Algorithm: u_sw = (1/(b*Kd)) * (-K1*sqrt(|s|)*sgn(s) + integral(-K2*sgn(s)*dt))
     // Thành phần tích phân:
-    u_sw_int = constrain(u_sw_int - K2 * sign_s * DT, -500.0f, 500.0f);
+    u_sw_int = constrain(u_sw_int - K2 * sign_s * DT, -1.0f, 1.0f);
 
     float u_sw = 0.0f;
     float b_Kd = b * safe_Kd;
@@ -451,6 +451,8 @@ void runController()
         g_u_sw = u_sw;
         g_u_sw_i = u_sw_int;
         g_estimate_depth = estimatedepth;
+        g_dot_alpha_ref = dot_alpha_ref;
+        g_ddot_alpha_ref = ddot_alpha_ref;
         xSemaphoreGive(g_mutex);
     }
 }
@@ -634,7 +636,7 @@ volatile float g_fc_lifting = 25.0f, g_fc_tailboard = 25.0f, g_omega_ref = 10.0f
 struct __attribute__((packed)) SerialTelemetry
 {
     uint16_t header = 0xAA55;
-    float values[30]; // 0-5: alpha_r/f, th_r/f, sp_r/f | 6-10: dtar, e, de, s, u | 11-15: Kp, Ki, Kd, K1, K2 | 16-18: K, t1, L | 19-21: fc_L, fc_T, om_R | 22-23: L_off, T_off | 24: is_auto | 25: alpha_man | 26: u_eq | 27: u_sw | 28: u_sw_i | 29: est_depth
+    float values[32]; // 0-5: alpha_r/f, th_r/f, sp_r/f | 6-10: dtar, e, de, s, u | 11-15: Kp, Ki, Kd, K1, K2 | 16-18: K, t1, L | 19-21: fc_L, fc_T, om_R | 22-23: L_off, T_off | 24: is_auto | 25: alpha_man | 26: u_eq | 27: u_sw | 28: u_sw_i | 29: est_depth | 30: dot_ref | 31: ddot_ref
     uint8_t checksum;
 };
 
@@ -685,6 +687,8 @@ void serialTuningTask(void *param)
             v[27] = g_u_sw;
             v[28] = g_u_sw_i;
             v[29] = g_estimate_depth;
+            v[30] = g_dot_alpha_ref;
+            v[31] = g_ddot_alpha_ref;
             xSemaphoreGive(g_mutex);
         }
         msg.checksum = calculateChecksum((uint8_t *)&msg.values, sizeof(msg.values));

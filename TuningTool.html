@@ -459,7 +459,7 @@
 
         async function readLoop() {
             let buffer = new Uint8Array();
-            const PKT_SIZE = 123; // 2 header + 30*4 floats + 1 checksum
+            const PKT_SIZE = 131; // 2 header + 32*4 floats + 1 checksum
             
             try {
                 reader = port.readable.getReader();
@@ -477,15 +477,15 @@
                             buffer = buffer.slice(PKT_SIZE);
                             
                             // Checksum (excluding 2 header bytes)
-                            const payload = pkt.slice(2, 122);
+                            const payload = pkt.slice(2, 130);
                             let crc = 0;
                             for (let b of payload) crc ^= b;
                             
-                            if (crc === pkt[122]) {
+                            if (crc === pkt[130]) {
                                 rxCount++;
                                 const dv = new DataView(pkt.buffer, pkt.byteOffset, pkt.byteLength);
                                 const v = [];
-                                for (let i = 0; i < 30; i++) v.push(dv.getFloat32(2 + i * 4, true));
+                                for (let i = 0; i < 32; i++) v.push(dv.getFloat32(2 + i * 4, true));
                                 
                                 // Mapping based on SerialTelemetry in main.cpp
                                 // 0:lift_r, 1:lift_f, 2:tail_r, 3:tail_f, 4:sp_r, 5:sp_f
@@ -494,7 +494,7 @@
                                 // 16-18: K, t1, L
                                 // 19-21: fcL, fcT, omR
                                 // 22-23: Loff, Toff, 24:isAuto, 25:alphaMan
-                                // 26:u_eq, 27:u_sw, 28:u_sw_i, 29:est_depth
+                                // 26:u_eq, 27:u_sw, 28:u_sw_i, 29:est_depth, 30:dot_ref, 31:ddot_ref
                                 
                                 const curTime = (Date.now() - startTime) / 1000;
                                 buf.time.push(curTime);
@@ -519,6 +519,7 @@
                                     const e = v[7], de = v[8], s = v[9], u_eq = v[26], u_sw = v[27], u_sw_i = v[28];
                                     const Kp = v[11], Ki = v[12], Kd = v[13], K1 = v[14], K2 = v[15];
                                     const K = v[16], t1 = v[17];
+                                    const dot_ref = v[30], ddot_ref = v[31];
                                     
                                     // Update Math Monitor - Values
                                     document.getElementById('m-sp').innerText = v[5].toFixed(2) + "°";
@@ -540,7 +541,8 @@
                                     // 2. Equivalent Control: u_eq
                                     const b = K / (t1 || 0.001);
                                     const a1 = 1 / (t1 || 0.001);
-                                    const ueq_tex = `\\frac{1}{${b.toFixed(2)}} [${a1.toFixed(2)}\\dot{\\alpha} + \\dots + ${(Kp/Kd).toFixed(2)}de + ${(Ki/Kd).toFixed(2)}e] = ${u_eq.toFixed(4)}`;
+                                    const alpha_dot = dot_ref - de;
+                                    const ueq_tex = `\\frac{1}{${b.toFixed(2)}} [${a1.toFixed(2)}(${alpha_dot.toFixed(2)}) + (${ddot_ref.toFixed(2)}) + ${(Kp/Kd).toFixed(2)}(${de.toFixed(2)}) + ${(Ki/Kd).toFixed(2)}(${e.toFixed(2)})] = ${u_eq.toFixed(4)}`;
                                     katex.render(ueq_tex, document.getElementById('math-ueq-sub'));
 
                                     // 3. Switching Control: u_sw
