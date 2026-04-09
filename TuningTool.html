@@ -291,16 +291,16 @@
         <div class="control-group">
             <h3>SMC & Super-Twisting</h3>
             <div class="control-slider">
-                <div class="slider-label"><span>Kp (Sliding Surface)</span><b id="val-Kp">2.80</b></div>
-                <input type="range" min="0" max="10" step="0.01" id="in-Kp" value="2.80" oninput="document.getElementById('val-Kp').innerText=parseFloat(this.value).toFixed(2)">
+                <div class="slider-label"><span>Kp </span><b id="val-Kp">1.40</b></div>
+                <input type="range" min="0" max="10" step="0.01" id="in-Kp" value="1.40" oninput="document.getElementById('val-Kp').innerText=parseFloat(this.value).toFixed(2)">
             </div>
             <div class="control-slider">
-                <div class="slider-label"><span>Ki (Sliding Surface)</span><b id="val-Ki">4.00</b></div>
-                <input type="range" min="0" max="10" step="0.01" id="in-Ki" value="4.00" oninput="document.getElementById('val-Ki').innerText=parseFloat(this.value).toFixed(2)">
+                <div class="slider-label"><span>Ki </span><b id="val-Ki">2.00</b></div>
+                <input type="range" min="0" max="10" step="0.01" id="in-Ki" value="2.00" oninput="document.getElementById('val-Ki').innerText=parseFloat(this.value).toFixed(2)">
             </div>
             <div class="control-slider">
-                <div class="slider-label"><span>Kd (Sliding Surface)</span><b id="val-Kd">1.00</b></div>
-                <input type="range" min="0" max="5" step="0.01" id="in-Kd" value="1.00" oninput="document.getElementById('val-Kd').innerText=parseFloat(this.value).toFixed(2)">
+                <div class="slider-label"><span>Kd </span><b id="val-Kd">0.50</b></div>
+                <input type="range" min="0" max="5" step="0.01" id="in-Kd" value="0.50" oninput="document.getElementById('val-Kd').innerText=parseFloat(this.value).toFixed(2)">
             </div>
             <div class="control-slider">
                 <div class="slider-label"><span>K1 (ST Prop Gain)</span><b id="val-K1">5.0</b></div>
@@ -361,26 +361,28 @@
 
     <div class="main-content">
         <div id="chart-depth" class="chart-container"></div>
+        <div id="chart-depth-err" class="chart-container"></div>
         <div id="chart-tracking" class="chart-container"></div>
         <div id="chart-error" class="chart-container"></div>
         <div id="chart-sliding" class="chart-container"></div>
         <div id="chart-control" class="chart-container"></div>
         <div id="chart-components" class="chart-container"></div>
-        <div id="chart-sensors" class="chart-container"></div>
-        <div id="chart-st-integ" class="chart-container"></div>
+        <div id="chart-liftsensors" class="chart-container"></div>
+        <div id="chart-tailsensors" class="chart-container"></div>
     </div>
 
     <script>
         let port, reader;
         let rxCount = 0, errCount = 0, lastTime = Date.now();
         const MAX_POINTS = 500;
+        const startTime = Date.now();
         
         // Data buffers
         const buf = {
             time: [], sp: [], act: [], e: [], de: [], s: [], 
             u: [], u_eq: [], u_sw: [], u_sw_i: [],
             lift_r: [], lift_f: [], tail_r: [], tail_f: [],
-            dtar: [], depth: []
+            dtar: [], depth: [], depth_e: []
         };
 
         function calculate_alpha_js(depthtarget, tailboardangle) {
@@ -428,24 +430,25 @@
             const layout = {
                 paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
                 margin: { t: 40, b: 30, l: 50, r: 10 }, font: { color: '#888', size: 10 },
-                xaxis: { showgrid: true, gridcolor: '#222', zeroline: false },
+                xaxis: { showgrid: true, gridcolor: '#222', zeroline: false, title: { text: 'Time (s)', font: { size: 9 } } },
                 yaxis: { showgrid: true, gridcolor: '#222', zeroline: true, zerolinecolor: '#444' },
                 title: { text: title, font: { size: 12, color: '#00a8ff', weight: 'bold' } },
                 showlegend: true, legend: { orientation: 'h', y: 1.1, font: { size: 9 } }
             };
             if (yRange) layout.yaxis.range = yRange;
-            Plotly.newPlot(id, traces.map(t => ({ y: [], name: t.name, line: { color: t.color, width: t.w || 2, dash: t.dash || 'solid' }, mode: 'lines' })), layout, { responsive: true, displayModeBar: false });
+            Plotly.newPlot(id, traces.map(t => ({ x: [], y: [], name: t.name, line: { color: t.color, width: t.w || 2, dash: t.dash || 'solid' }, mode: 'lines' })), layout, { responsive: true, displayModeBar: false });
         }
 
         function initCharts() {
-            createChart('chart-depth', 'DEPTH TRACKING (mm)', [{ name: 'Target (dtar)', color: '#00a8ff', dash: 'dash' }, { name: 'Estimated', color: '#4cd137' }]);
+            createChart('chart-depth', 'DEPTH TRACKING (mm)', [{ name: 'Target (dtar)', color: '#00a8ff', dash: 'dash' }, { name: 'Actual', color: '#4cd137' }]);
+            createChart('chart-depth-err', 'DEPTH ERROR (mm)', [{ name: 'Error (dtar-depth)', color: '#e84118' }]);
             createChart('chart-tracking', 'ALPHA TRACKING (deg)', [{ name: 'Setpoint (α_ref)', color: '#00a8ff', dash: 'dash' }, { name: 'Actual (α_filt)', color: '#4cd137' }]);
             createChart('chart-error', 'TRACKING ERROR', [{ name: 'Error (e)', color: '#e84118' }, { name: 'd_Error (de)', color: '#9c88ff', w: 1 }]);
             createChart('chart-sliding', 'SLIDING SURFACE', [{ name: 'Sliding (s)', color: '#f1c40f' }]);
             createChart('chart-control', 'CONTROL OUTPUT (u)', [{ name: 'Total Output', color: '#fff' }], [-1.1, 1.1]);
             createChart('chart-components', 'U COMPONENTS', [{ name: 'u_eq', color: '#ffa502', w: 1.5 }, { name: 'u_sw', color: '#2ed573', w: 1.5 }]);
-            createChart('chart-sensors', 'RAW SENSORS', [{ name: 'Lift Raw', color: '#4cd137', w: 1 }, { name: 'Tail Raw', color: '#f1c40f', w: 1 }]);
-            createChart('chart-st-integ', 'ST INTEGRAL COMP', [{ name: 'u_sw_i', color: '#00cec9' }]);
+            createChart('chart-liftsensors', 'LIFT SENSORS', [{ name: 'Lift Raw', color: '#4cd137', w: 1 }, { name: 'Lift filter', color: '#f1c40f', w: 1 }]);
+            createChart('chart-tailsensors', 'TAILBOARD SENSORS', [{ name: 'Tail Raw', color: '#4cd137', w: 1 }, { name: 'Tail filter', color: '#f1c40f', w: 1 }]);
         }
 
         function initMath() {
@@ -493,12 +496,15 @@
                                 // 22-23: Loff, Toff, 24:isAuto, 25:alphaMan
                                 // 26:u_eq, 27:u_sw, 28:u_sw_i, 29:est_depth
                                 
+                                const curTime = (Date.now() - startTime) / 1000;
+                                buf.time.push(curTime);
                                 buf.lift_r.push(v[0]); buf.lift_f.push(v[1]);
                                 buf.tail_r.push(v[2]); buf.tail_f.push(v[3]);
                                 buf.sp.push(v[5]); buf.act.push(v[1]);
                                 buf.e.push(v[7]); buf.de.push(v[8]); buf.s.push(v[9]);
                                 buf.u.push(v[10]); buf.u_eq.push(v[26]); buf.u_sw.push(v[27]); buf.u_sw_i.push(v[28]);
                                 buf.dtar.push(v[6]); buf.depth.push(v[29]);
+                                buf.depth_e.push(v[6] - v[29]);
                                 
                                 Object.values(buf).forEach(a => { if(a.length > MAX_POINTS) a.shift(); });
 
@@ -548,14 +554,15 @@
                                 }
 
                                 if (rxCount % 10 === 0) {
-                                    Plotly.update('chart-depth', { y: [buf.dtar, buf.depth] });
-                                    Plotly.update('chart-tracking', { y: [buf.sp, buf.act] });
-                                    Plotly.update('chart-error', { y: [buf.e, buf.de] });
-                                    Plotly.update('chart-sliding', { y: [buf.s] });
-                                    Plotly.update('chart-control', { y: [buf.u] });
-                                    Plotly.update('chart-components', { y: [buf.u_eq, buf.u_sw] });
-                                    Plotly.update('chart-sensors', { y: [buf.lift_r, buf.tail_r] });
-                                    Plotly.update('chart-st-integ', { y: [buf.u_sw_i] });
+                                    Plotly.update('chart-depth', { x: [buf.time, buf.time], y: [buf.dtar, buf.depth] });
+                                    Plotly.update('chart-depth-err', { x: [buf.time], y: [buf.depth_e] });
+                                    Plotly.update('chart-tracking', { x: [buf.time, buf.time], y: [buf.sp, buf.act] });
+                                    Plotly.update('chart-error', { x: [buf.time], y: [buf.e] });
+                                    Plotly.update('chart-sliding', { x: [buf.time], y: [buf.s] });
+                                    Plotly.update('chart-control', { x: [buf.time], y: [buf.u] });
+                                    Plotly.update('chart-components', { x: [buf.time, buf.time], y: [buf.u_eq, buf.u_sw] });
+                                    Plotly.update('chart-liftsensors', { x: [buf.time, buf.time], y: [buf.lift_r, buf.lift_f] });
+                                    Plotly.update('chart-tailsensors', { x: [buf.time, buf.time], y: [buf.tail_r, buf.tail_f] });
                                 }
                             } else {
                                 errCount++;
@@ -598,7 +605,7 @@
             const buffer = new ArrayBuffer(bufSize);
             const dv = new DataView(buffer);
             
-            dv.setUint16(0, 0x55AA, true); // Match main.cpp SerialCommand header 0xAA55
+            dv.setUint16(0, 0xAA55, true); // Match main.cpp SerialCommand header check (peek 0x55)
             
             let crc = 0;
             for (let i = 0; i < 16; i++) {

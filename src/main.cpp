@@ -26,7 +26,7 @@
  * ====================================================================
  */
 
-#define DEBUG_SERIAL  //tuning by serial
+#define DEBUG_SERIAL // tuning by serial
 #define MONITOR_WIFI // monitor by wifi
 
 #include <Arduino.h>
@@ -73,13 +73,15 @@ static const char *AP_PASS = "12345678";
 static const float DT = 0.002f; // 2 ms = 500 Hz
 static const TickType_t DT_TICKS = pdMS_TO_TICKS(2);
 
-static const float DT_SENSOR = 0.002f; // 2 ms = 500 Hz
 static const TickType_t SENSOR_DT_TICKS = pdMS_TO_TICKS(2);
 
 #ifdef MONITOR_WIFI
 static const TickType_t WEB_DT_TICKS = pdMS_TO_TICKS(50);
 #endif
 
+#ifdef DEBUG_SERIAL
+static const TickType_t SERIALDEBUG_DT_TICKS = pdMS_TO_TICKS(20); // 20ms =50hz
+#endif
 
 // ────────────────────────────────────────────────────────────────────
 //  CẤU TRÚC MÔ HÌNH SOIPDT (Discrete-time, Euler forward)
@@ -220,6 +222,8 @@ volatile float g_u_eq = 0.0f;
 volatile float g_u_sw = 0.0f;
 volatile float g_u_sw_i = 0.0f;
 volatile float g_estimate_depth = 0.0f;
+volatile float g_dot_alpha_ref = 0.0f;
+volatile float g_ddot_alpha_ref = 0.0f;
 
 // ────────────────────────────────────────────────────────────────────
 //  THAM SỐ ĐIỀU KHIỂN
@@ -398,7 +402,11 @@ void runController()
     float alpha_actual_dot = (y_pred - y_pred_prev) / DT;
     y_pred_prev = y_pred;
     float e = alpha_ref - y_pred, de = dot_alpha_ref - alpha_actual_dot;
-    e_int = constrain(e_int + e * DT, -500.0f, 500.0f);
+    // e_int = constrain(e_int + e * DT, -500.0f, 500.0f);
+    if (fabsf(e) > 0.5f) {
+        e_int += e * DT;
+    }
+    e_int= constrain(e_int, -0.2f, 0.2f);
 
     float s = Kp * e + Ki * e_int + Kd * de;
 
@@ -431,7 +439,7 @@ void runController()
     float u_out = constrain(u_eq + u_sw, -PWM_MAX_ABS, PWM_MAX_ABS);
     driveActuator(u_out);
     u_prev = u_out;
-    float estimatedepth= (float)calculate_estimate_depth(liftingangle, tailangle);
+    float estimatedepth = (float)calculate_estimate_depth(liftingangle, tailangle);
     if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(5)) == pdTRUE)
     {
         g_liftingangle = liftingangle;
@@ -553,7 +561,6 @@ void webBroadcastTask(void *param)
     }
 }
 
-
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len)
 {
     if (type == WS_EVT_DATA)
@@ -626,7 +633,7 @@ volatile float g_fc_lifting = 25.0f, g_fc_tailboard = 25.0f, g_omega_ref = 10.0f
 
 struct __attribute__((packed)) SerialTelemetry
 {
-    uint16_t header = 0x55AA;
+    uint16_t header = 0xAA55;
     float values[30]; // 0-5: alpha_r/f, th_r/f, sp_r/f | 6-10: dtar, e, de, s, u | 11-15: Kp, Ki, Kd, K1, K2 | 16-18: K, t1, L | 19-21: fc_L, fc_T, om_R | 22-23: L_off, T_off | 24: is_auto | 25: alpha_man | 26: u_eq | 27: u_sw | 28: u_sw_i | 29: est_depth
     uint8_t checksum;
 };
@@ -709,8 +716,8 @@ void serialTuningTask(void *param)
                             g_fc_lifting = cv[9];
                             g_fc_tailboard = cv[10];
                             g_omega_ref = cv[11];
-                            filterLifting.init(g_fc_lifting, 860.0f);
-                            filterTailboard.init(g_fc_tailboard, 860.0f);
+                            filterLifting.init(g_fc_lifting, 500.0f);
+                            filterTailboard.init(g_fc_tailboard, 500.0f);
                             refFilter.init(g_omega_ref, 1.0f);
                         }
                         g_lift_offset = cv[12];
@@ -725,7 +732,7 @@ void serialTuningTask(void *param)
             else
                 Serial.read();
         }
-        vTaskDelayUntil(&xLastWake, pdMS_TO_TICKS(50));
+        vTaskDelayUntil(&xLastWake, SERIALDEBUG_DT_TICKS);
     }
 }
 #endif
@@ -758,8 +765,8 @@ void setup()
     pwmIN1.attachPin(PIN_MOTOR_IN1, PWM_FREQ_HZ, PWM_BITS);
     pwmIN2.attachPin(PIN_MOTOR_IN2, PWM_FREQ_HZ, PWM_BITS);
     g_mutex = xSemaphoreCreateMutex();
-    filterLifting.init(25.0f, 860.0f);
-    filterTailboard.init(25.0f, 860.0f);
+    filterLifting.init(25.0f, 500.0f);
+    filterTailboard.init(25.0f, 500.0f);
     refFilter.init(10.0f, 1.0f);
     g_model_wd.K = g_K;
     g_model_wd.tau1 = g_tau1;
@@ -772,6 +779,16 @@ void setup()
     g_model_dirty = false;
 
 #ifdef MONITOR_WIFI
+
+    if (LittleFS.begin(true))
+    {
+        Serial.println("[FS] LittleFS mounted successfully");
+    }
+    else
+    {
+        Serial.println("[FS] LittleFS mount failed");
+    }
+
     // WiFi AP
     WiFi.mode(WIFI_AP);
     WiFi.softAP(AP_SSID, AP_PASS);
