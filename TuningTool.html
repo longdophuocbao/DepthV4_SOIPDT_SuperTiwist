@@ -260,6 +260,7 @@
             <div id="row-dtar" class="input-row"><label>Target Depth (mm)</label><input type="number" step="1" id="in-dtar" value="100"></div>
             <div id="row-alpha" class="input-row" style="display:none;"><label>Manual Alpha (deg)</label><input type="number" step="0.1" id="in-alpha" value="20.0"></div>
             <div class="stat-line" id="preview-alpha">Predicted Alpha: --</div>
+            <div class="stat-line" style="color:var(--success); font-weight: bold;">Current Depth: <span id="cur-depth">--</span> mm</div>
         </div>
 
         <div class="control-group">
@@ -359,6 +360,7 @@
     </div>
 
     <div class="main-content">
+        <div id="chart-depth" class="chart-container"></div>
         <div id="chart-tracking" class="chart-container"></div>
         <div id="chart-error" class="chart-container"></div>
         <div id="chart-sliding" class="chart-container"></div>
@@ -377,7 +379,8 @@
         const buf = {
             time: [], sp: [], act: [], e: [], de: [], s: [], 
             u: [], u_eq: [], u_sw: [], u_sw_i: [],
-            lift_r: [], lift_f: [], tail_r: [], tail_f: []
+            lift_r: [], lift_f: [], tail_r: [], tail_f: [],
+            dtar: [], depth: []
         };
 
         function calculate_alpha_js(depthtarget, tailboardangle) {
@@ -435,7 +438,8 @@
         }
 
         function initCharts() {
-            createChart('chart-tracking', 'SYSTEM TRACKING', [{ name: 'Setpoint (α_ref)', color: '#00a8ff', dash: 'dash' }, { name: 'Actual (α_filt)', color: '#4cd137' }]);
+            createChart('chart-depth', 'DEPTH TRACKING (mm)', [{ name: 'Target (dtar)', color: '#00a8ff', dash: 'dash' }, { name: 'Estimated', color: '#4cd137' }]);
+            createChart('chart-tracking', 'ALPHA TRACKING (deg)', [{ name: 'Setpoint (α_ref)', color: '#00a8ff', dash: 'dash' }, { name: 'Actual (α_filt)', color: '#4cd137' }]);
             createChart('chart-error', 'TRACKING ERROR', [{ name: 'Error (e)', color: '#e84118' }, { name: 'd_Error (de)', color: '#9c88ff', w: 1 }]);
             createChart('chart-sliding', 'SLIDING SURFACE', [{ name: 'Sliding (s)', color: '#f1c40f' }]);
             createChart('chart-control', 'CONTROL OUTPUT (u)', [{ name: 'Total Output', color: '#fff' }], [-1.1, 1.1]);
@@ -452,7 +456,7 @@
 
         async function readLoop() {
             let buffer = new Uint8Array();
-            const PKT_SIZE = 119; // 2 header + 29*4 floats + 1 checksum
+            const PKT_SIZE = 123; // 2 header + 30*4 floats + 1 checksum
             
             try {
                 reader = port.readable.getReader();
@@ -470,15 +474,15 @@
                             buffer = buffer.slice(PKT_SIZE);
                             
                             // Checksum (excluding 2 header bytes)
-                            const payload = pkt.slice(2, 118);
+                            const payload = pkt.slice(2, 122);
                             let crc = 0;
                             for (let b of payload) crc ^= b;
                             
-                            if (crc === pkt[118]) {
+                            if (crc === pkt[122]) {
                                 rxCount++;
                                 const dv = new DataView(pkt.buffer, pkt.byteOffset, pkt.byteLength);
                                 const v = [];
-                                for (let i = 0; i < 29; i++) v.push(dv.getFloat32(2 + i * 4, true));
+                                for (let i = 0; i < 30; i++) v.push(dv.getFloat32(2 + i * 4, true));
                                 
                                 // Mapping based on SerialTelemetry in main.cpp
                                 // 0:lift_r, 1:lift_f, 2:tail_r, 3:tail_f, 4:sp_r, 5:sp_f
@@ -487,13 +491,14 @@
                                 // 16-18: K, t1, L
                                 // 19-21: fcL, fcT, omR
                                 // 22-23: Loff, Toff, 24:isAuto, 25:alphaMan
-                                // 26:u_eq, 27:u_sw, 28:u_sw_i
+                                // 26:u_eq, 27:u_sw, 28:u_sw_i, 29:est_depth
                                 
                                 buf.lift_r.push(v[0]); buf.lift_f.push(v[1]);
                                 buf.tail_r.push(v[2]); buf.tail_f.push(v[3]);
                                 buf.sp.push(v[5]); buf.act.push(v[1]);
                                 buf.e.push(v[7]); buf.de.push(v[8]); buf.s.push(v[9]);
                                 buf.u.push(v[10]); buf.u_eq.push(v[26]); buf.u_sw.push(v[27]); buf.u_sw_i.push(v[28]);
+                                buf.dtar.push(v[6]); buf.depth.push(v[29]);
                                 
                                 Object.values(buf).forEach(a => { if(a.length > MAX_POINTS) a.shift(); });
 
@@ -515,6 +520,7 @@
                                     document.getElementById('m-e').innerText = e.toFixed(3) + "°";
                                     document.getElementById('m-de').innerText = de.toFixed(2) + "°/s";
                                     document.getElementById('m-u').innerText = v[10].toFixed(4);
+                                    document.getElementById('cur-depth').innerText = v[29].toFixed(1);
 
                                     // Detailed Calculations using LaTeX
                                     // 1. Sliding Surface: s = Kp*e + Ki*e_int + Kd*de
@@ -542,6 +548,7 @@
                                 }
 
                                 if (rxCount % 10 === 0) {
+                                    Plotly.update('chart-depth', { y: [buf.dtar, buf.depth] });
                                     Plotly.update('chart-tracking', { y: [buf.sp, buf.act] });
                                     Plotly.update('chart-error', { y: [buf.e, buf.de] });
                                     Plotly.update('chart-sliding', { y: [buf.s] });

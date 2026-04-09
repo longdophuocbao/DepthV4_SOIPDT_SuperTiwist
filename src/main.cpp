@@ -26,7 +26,7 @@
  * ====================================================================
  */
 
-// #define DEBUG_SERIAL  //tuning by serial
+#define DEBUG_SERIAL  //tuning by serial
 #define MONITOR_WIFI // monitor by wifi
 
 #include <Arduino.h>
@@ -215,6 +215,7 @@ volatile float g_u = 0.0f;
 volatile float g_u_eq = 0.0f;
 volatile float g_u_sw = 0.0f;
 volatile float g_u_sw_i = 0.0f;
+volatile float g_estimate_depth = 0.0f;
 
 // ────────────────────────────────────────────────────────────────────
 //  THAM SỐ ĐIỀU KHIỂN
@@ -426,7 +427,7 @@ void runController()
     float u_out = constrain(u_eq + u_sw, -PWM_MAX_ABS, PWM_MAX_ABS);
     driveActuator(u_out);
     u_prev = u_out;
-
+    float estimatedepth= (float)calculate_estimate_depth(liftingangle, tailangle);
     if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(5)) == pdTRUE)
     {
         g_liftingangle = liftingangle;
@@ -437,6 +438,7 @@ void runController()
         g_u_eq = u_eq;
         g_u_sw = u_sw;
         g_u_sw_i = u_sw_int;
+        g_estimate_depth = 
         xSemaphoreGive(g_mutex);
     }
 }
@@ -595,7 +597,7 @@ volatile float g_fc_lifting = 25.0f, g_fc_tailboard = 25.0f, g_omega_ref = 10.0f
 struct __attribute__((packed)) SerialTelemetry
 {
     uint16_t header = 0x55AA;
-    float values[29]; // 0-5: alpha_r/f, th_r/f, sp_r/f | 6-10: dtar, e, de, s, u | 11-15: Kp, Ki, Kd, K1, K2 | 16-18: K, t1, L | 19-21: fc_L, fc_T, om_R | 22-23: L_off, T_off | 24: is_auto | 25: alpha_man | 26: u_eq | 27: u_sw | 28: u_sw_i
+    float values[30]; // 0-5: alpha_r/f, th_r/f, sp_r/f | 6-10: dtar, e, de, s, u | 11-15: Kp, Ki, Kd, K1, K2 | 16-18: K, t1, L | 19-21: fc_L, fc_T, om_R | 22-23: L_off, T_off | 24: is_auto | 25: alpha_man | 26: u_eq | 27: u_sw | 28: u_sw_i | 29: est_depth
     uint8_t checksum;
 };
 
@@ -645,6 +647,7 @@ void serialTuningTask(void *param)
             v[26] = g_u_eq;
             v[27] = g_u_sw;
             v[28] = g_u_sw_i;
+            v[29] = g_estimate_depth;
             xSemaphoreGive(g_mutex);
         }
         msg.checksum = calculateChecksum((uint8_t *)&msg.values, sizeof(msg.values));
