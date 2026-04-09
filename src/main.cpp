@@ -377,17 +377,19 @@ void runController()
     if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(5)) == pdTRUE)
     {
         g_setpoint = alpha_ref;
+        g_dot_alpha_ref = dot_alpha_ref;   // Bổ sung dòng này
+        g_ddot_alpha_ref = ddot_alpha_ref; // Bổ sung dòng này
         g_tailboardangle = tailangle;
         xSemaphoreGive(g_mutex);
     }
 
     if (dirty)
     {
-        g_model_wd.K = K;
+        g_model_wd.K = -K; // u dương -> alpha giảm nên gain âm
         g_model_wd.tau1 = tau1;
         g_model_wd.L = L;
         g_model_wd.init(DT);
-        g_model_nd.K = K;
+        g_model_nd.K = -K;
         g_model_nd.tau1 = tau1;
         g_model_nd.L = 0.0f;
         g_model_nd.init(DT);
@@ -406,12 +408,12 @@ void runController()
     if (fabsf(e) > 0.5f) {
         e_int += e * DT;
     }
-    e_int= constrain(e_int, -0.2f, 0.2f);
+    e_int= constrain(e_int, -2.0f, 2.0f);
 
     float s = Kp * e + Ki * e_int + Kd * de;
 
     float safe_tau1 = (fabsf(tau1) < 1e-4f) ? 1e-4f : tau1;
-    float a1 = 1.0f / safe_tau1, a2 = 0.0f, b = K / safe_tau1;
+    float a1 = 1.0f / safe_tau1, a2 = 0.0f, b = -K / safe_tau1;
 
     float u_eq = 0.0f;
     float safe_Kd = (fabsf(Kd) < 1e-4f) ? ((Kd >= 0.0f) ? 1e-4f : -1e-4f) : Kd;
@@ -426,7 +428,7 @@ void runController()
 
     // Super-Twisting Algorithm: u_sw = (1/(b*Kd)) * (-K1*sqrt(|s|)*sgn(s) + integral(-K2*sgn(s)*dt))
     // Thành phần tích phân:
-    u_sw_int = constrain(u_sw_int - K2 * sign_s * DT, -1.0f, 1.0f);
+    u_sw_int = constrain(u_sw_int + K2 * sign_s * DT, -1.0f, 1.0f);
 
     float u_sw = 0.0f;
     float b_Kd = b * safe_Kd;
