@@ -395,6 +395,7 @@
             <div class="depth-container">
                 <div>
                     <div class="depth-value" id="val-depth-current">0.0<span class="depth-unit">mm</span></div>
+                    <div style="font-size: 0.8rem; color: var(--success); font-weight: bold; margin-top: 5px;">EST: <span id="val-depth-est">0.0</span>mm</div>
                 </div>
                 <div class="depth-divider"></div>
                 <div style="display: flex; flex-direction: column; align-items: center;">
@@ -602,8 +603,10 @@
             elSetpoint.innerText = data.setpoint.toFixed(2) + "°";
             elE.innerText = data.e.toFixed(3); elDe.innerText = data.de.toFixed(3);
             elS.innerText = data.s.toFixed(3); elU.innerText = data.u.toFixed(3);
+            if (document.getElementById('val-depth-est')) {
+                document.getElementById('val-depth-est').innerText = data.estimate_depth.toFixed(1);
+            }
             
-            // Cần hàm tính depth từ alpha & tail để hiển thị depth thực tế (ước lượng)
             // Hiện tại hiển thị alpha cho chart
             chartHistoryActual.push(data.liftingangle); chartHistorySetpoint.push(data.setpoint);
             if (chartHistoryActual.length > maxChartPoints) { chartHistoryActual.shift(); chartHistorySetpoint.shift(); }
@@ -620,7 +623,7 @@
             socket.onmessage = (event) => {
                 if (event.data instanceof ArrayBuffer) {
                     const dv = new DataView(event.data);
-                    // Cấu trúc ControllerStatus mới: 8 floats (32 bytes)
+                    // Cấu trúc ControllerStatus mới: 9 floats (36 bytes)
                     updateUI({
                         liftingangle: dv.getFloat32(0, true),
                         tailboardangle: dv.getFloat32(4, true),
@@ -629,7 +632,8 @@
                         e: dv.getFloat32(16, true),
                         de: dv.getFloat32(20, true),
                         s: dv.getFloat32(24, true),
-                        u: dv.getFloat32(28, true)
+                        u: dv.getFloat32(28, true),
+                        estimate_depth: dv.getFloat32(32, true)
                     });
                 }
             };

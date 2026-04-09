@@ -36,7 +36,6 @@
 #include <LittleFS.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-#include <ArduinoJson.h>
 #include <DNSServer.h>
 #endif
 
@@ -76,6 +75,11 @@ static const TickType_t DT_TICKS = pdMS_TO_TICKS(2);
 
 static const float DT_SENSOR = 0.002f; // 2 ms = 500 Hz
 static const TickType_t SENSOR_DT_TICKS = pdMS_TO_TICKS(2);
+
+#ifdef MONITOR_WIFI
+static const TickType_t WEB_DT_TICKS = pdMS_TO_TICKS(50);
+#endif
+
 
 // ────────────────────────────────────────────────────────────────────
 //  CẤU TRÚC MÔ HÌNH SOIPDT (Discrete-time, Euler forward)
@@ -438,7 +442,7 @@ void runController()
         g_u_eq = u_eq;
         g_u_sw = u_sw;
         g_u_sw_i = u_sw_int;
-        g_estimate_depth = 
+        g_estimate_depth = estimatedepth;
         xSemaphoreGive(g_mutex);
     }
 }
@@ -502,6 +506,54 @@ struct __attribute__((packed)) SettingsPayload
     float alpha_manual; // Alpha target thủ công
 };
 
+struct __attribute__((packed)) ControllerStatus
+{
+    float liftingangle;
+    float tailboardangle;
+    float setpoint;
+    float depth_target;
+    float e;
+    float de;
+    float s;
+    float u;
+    float estimate_depth;
+    float is_auto;
+};
+
+void broadcastData()
+{
+    if (ws.count() == 0)
+        return;
+
+    ControllerStatus status;
+    if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(5)) != pdTRUE)
+        return;
+    status.liftingangle = g_liftingangle;
+    status.tailboardangle = g_tailboardangle;
+    status.setpoint = g_setpoint;
+    status.depth_target = g_depth_target;
+    status.e = g_e;
+    status.de = g_de;
+    status.s = g_s;
+    status.u = g_u;
+    status.is_auto = g_is_auto ? 1.0f : 0.0f;
+    xSemaphoreGive(g_mutex);
+
+    ws.binaryAll((uint8_t *)&status, sizeof(ControllerStatus));
+}
+
+void webBroadcastTask(void *param)
+{
+    TickType_t xLastWake = xTaskGetTickCount();
+    while (true)
+    {
+        broadcastData();
+        ws.cleanupClients();
+        vTaskDelayUntil(&xLastWake, WEB_DT_TICKS);
+    }
+}
+
+
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len)
 {
     if (type == WS_EVT_DATA)
@@ -559,28 +611,6 @@ void setupRoutes()
               {
         AsyncWebServerResponse *response = req->beginResponse(LittleFS, "/index.html", "text/html");
         req->send(response); });
-
-    // Các endpoint HTTP cũ vẫn giữ lại để tương thích (fallback)
-    server.on("/data", HTTP_GET, [](AsyncWebServerRequest *req)
-              {
-        float liftingangle, sp, e, de, s, u;
-        if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(10)) != pdTRUE) {
-            req->send(503, "text/plain", "Busy"); return;
-        }
-        liftingangle=g_liftingangle; sp=g_setpoint; e=g_e; de=g_de; s=g_s; u=g_u;
-        xSemaphoreGive(g_mutex);
-
-        JsonDocument doc;
-        doc["liftingangle"]    = roundf(liftingangle * 10.0f) / 10.0f;
-        doc["setpoint"] = (int)roundf(sp);
-        doc["e"]        = roundf(e  * 100.0f) / 100.0f;
-        doc["de"]       = roundf(de * 100.0f) / 100.0f;
-        doc["s"]        = roundf(s  * 100.0f) / 100.0f;
-        doc["u"]        = roundf(u  * 100.0f) / 100.0f;
-
-        String json;
-        serializeJson(doc, json);
-        req->send(200, "application/json", json); });
 
     server.onNotFound([](AsyncWebServerRequest *req)
                       {
@@ -753,6 +783,8 @@ void setup()
     setupRoutes();
     server.begin();
     Serial.println("[HTTP]  Server OK – port 80");
+    // xTaskCreatePinnedToCore(wsStatusTask, "WSStatus", 4096, nullptr, 1, nullptr, 0);
+    xTaskCreatePinnedToCore(webBroadcastTask, "Web_WS", 4096, nullptr, 1, nullptr, 0);
 #endif
 
     xTaskCreatePinnedToCore(sensorReadTask, "SensRead", 4096, nullptr, 3, nullptr, 1);
