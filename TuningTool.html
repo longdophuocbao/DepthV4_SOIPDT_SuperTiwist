@@ -376,14 +376,37 @@
         let rxCount = 0, errCount = 0, lastTime = Date.now();
         const MAX_POINTS = 500;
         const startTime = Date.now();
-        
-        // Data buffers
-        const buf = {
-            time: [], sp: [], act: [], e: [], de: [], s: [], 
-            u: [], u_eq: [], u_sw: [], u_sw_i: [],
-            lift_r: [], lift_f: [], tail_r: [], tail_f: [],
-            dtar: [], depth: [], depth_e: []
-        };
+
+        // ── Circular buffer (tránh shift O(n)) ──────────────────────────
+        class CircBuf {
+            constructor(size) { this.data = new Float32Array(size); this.head = 0; this.len = 0; this.cap = size; }
+            push(v) { this.data[this.head] = v; this.head = (this.head + 1) % this.cap; if (this.len < this.cap) this.len++; }
+            toArray() {
+                if (this.len < this.cap) return Array.from(this.data.subarray(0, this.len));
+                const tail = this.head;
+                return Array.from(this.data.subarray(tail)).concat(Array.from(this.data.subarray(0, tail)));
+            }
+        }
+
+        const BUF_KEYS = ['time','sp','act','e','de','s','u','u_eq','u_sw','u_sw_i','lift_r','lift_f','tail_r','tail_f','dtar','depth','depth_e'];
+        const buf = {};
+        BUF_KEYS.forEach(k => buf[k] = new CircBuf(MAX_POINTS));
+
+        // ── Pre-allocated serial ring buffer ────────────────────────────
+        const SERIAL_BUF_SIZE = 4096;
+        const serialRing = new Uint8Array(SERIAL_BUF_SIZE);
+        let ringWrite = 0, ringRead = 0;
+        function ringLen() { return (ringWrite - ringRead + SERIAL_BUF_SIZE) % SERIAL_BUF_SIZE; }
+        function ringPush(bytes) {
+            for (const b of bytes) { serialRing[ringWrite] = b; ringWrite = (ringWrite + 1) % SERIAL_BUF_SIZE; }
+        }
+        function ringPeek(offset) { return serialRing[(ringRead + offset) % SERIAL_BUF_SIZE]; }
+        function ringConsume(n) { ringRead = (ringRead + n) % SERIAL_BUF_SIZE; }
+        function ringSlice(n) {
+            const out = new Uint8Array(n);
+            for (let i = 0; i < n; i++) out[i] = serialRing[(ringRead + i) % SERIAL_BUF_SIZE];
+            return out;
+        }
 
         function calculate_alpha_js(depthtarget, tailboardangle) {
             if (tailboardangle < 0.5) return 0.0;
@@ -407,12 +430,16 @@
             const mode = document.getElementById('in-mode').value;
             if (mode === "1") {
                 const dtar = parseFloat(document.getElementById('in-dtar').value);
-                const tail = buf.tail_f.length > 0 ? buf.tail_f[buf.tail_f.length-1] : 0;
+                // CircBuf: lấy giá trị mới nhất qua head-1
+                const tailBuf = buf.tail_f;
+                const tail = tailBuf.len > 0
+                    ? tailBuf.data[(tailBuf.head - 1 + tailBuf.cap) % tailBuf.cap]
+                    : 0;
                 const pred = calculate_alpha_js(dtar, tail);
-                document.getElementById('preview-alpha').innerText = `Predicted α: ${pred.toFixed(2)}°`;
+                domSet('preview-alpha', `Predicted α: ${pred.toFixed(2)}°`);
             } else {
                 const alpha = parseFloat(document.getElementById('in-alpha').value);
-                document.getElementById('preview-alpha').innerText = `Manual α: ${alpha.toFixed(1)}°`;
+                domSet('preview-alpha', `Manual α: ${alpha.toFixed(1)}°`);
             }
         }
 
@@ -423,7 +450,13 @@
             updatePreview();
         });
 
-        const syncParams = () => { if (document.getElementById('liveSync').checked) sendCommand(); };
+        // ── Debounce liveSync: gộp nhiều event thành 1 lần gửi ─────────
+        let liveSyncTimer = null;
+        const syncParams = () => {
+            if (!document.getElementById('liveSync').checked) return;
+            clearTimeout(liveSyncTimer);
+            liveSyncTimer = setTimeout(sendCommand, 500); // gửi sau 500ms không hoạt động
+        };
         document.querySelectorAll('input, select').forEach(el => el.addEventListener('input', syncParams));
 
         function createChart(id, title, traces, yRange = null) {
@@ -457,121 +490,139 @@
             katex.render("u_{sw} = \\frac{1}{b K_d} \\left( -K_1 \\sqrt{|s|} \\text{sgn}(s) + u_{sw,i} \\right)", document.getElementById('math-usw-formula'));
         }
 
+        // ── Batch DOM text update (giảm reflow) ─────────────────────────
+        const domCache = {};
+        function domSet(id, val) {
+            if (domCache[id] === val) return;
+            domCache[id] = val;
+            document.getElementById(id).innerText = val;
+        }
+
+        // ── KaTeX render throttle (chỉ render text khi giá trị đổi rõ) ─
+        let katexPending = false;
+        let katexData = null;
+        function scheduleKatex(data) {
+            katexData = data;
+            if (katexPending) return;
+            katexPending = true;
+            requestAnimationFrame(() => {
+                katexPending = false;
+                const { e, de, s, u_eq, u_sw, u_sw_i, Kp, Ki, Kd, K1, K, t1, dot_ref, ddot_ref } = katexData;
+                let eint_display = Math.abs(Ki) > 1e-6 ? (s - Kp*e - Kd*de) / Ki : 0;
+                katex.render(`${Kp.toFixed(2)}(${e.toFixed(2)}) + ${Ki.toFixed(2)}(${eint_display.toFixed(2)}) + ${Kd.toFixed(2)}(${de.toFixed(2)}) = ${s.toFixed(4)}`, document.getElementById('math-s-sub'));
+                const b = K / (t1 || 0.001), a1 = 1 / (t1 || 0.001), alpha_dot = dot_ref - de;
+                katex.render(`\\frac{1}{${b.toFixed(2)}} [${a1.toFixed(2)}(${alpha_dot.toFixed(2)}) + (${ddot_ref.toFixed(2)}) + ${(Kp/Kd).toFixed(2)}(${de.toFixed(2)}) + ${(Ki/Kd).toFixed(2)}(${e.toFixed(2)})] = ${u_eq.toFixed(4)}`, document.getElementById('math-ueq-sub'));
+                const bKd = b * Kd, sign_s = s > 0 ? 1 : (s < 0 ? -1 : 0), term1 = -K1 * Math.sqrt(Math.abs(s)) * sign_s;
+                katex.render(`\\frac{1}{${bKd.toFixed(2)}} [(${term1.toFixed(3)}) + (${u_sw_i.toFixed(3)})] = ${u_sw.toFixed(4)}`, document.getElementById('math-usw-sub'));
+            });
+        }
+
+        // ── Plotly batch update ──────────────────────────────────────────
+        let plotPending = false;
+        function schedulePlot() {
+            if (plotPending) return;
+            plotPending = true;
+            requestAnimationFrame(() => {
+                plotPending = false;
+                const t = buf.time.toArray();
+                const arrOf = k => buf[k].toArray();
+                Plotly.update('chart-depth',      { x: [t, t],                y: [arrOf('dtar'), arrOf('depth')] });
+                Plotly.update('chart-depth-err',  { x: [t],                   y: [arrOf('depth_e')] });
+                Plotly.update('chart-tracking',   { x: [t, t],                y: [arrOf('sp'), arrOf('act')] });
+                Plotly.update('chart-error',      { x: [t],                   y: [arrOf('e')] });
+                Plotly.update('chart-sliding',    { x: [t],                   y: [arrOf('s')] });
+                Plotly.update('chart-control',    { x: [t],                   y: [arrOf('u')] });
+                Plotly.update('chart-components', { x: [t, t],                y: [arrOf('u_eq'), arrOf('u_sw')] });
+                Plotly.update('chart-liftsensors',{ x: [t, t],                y: [arrOf('lift_r'), arrOf('lift_f')] });
+                Plotly.update('chart-tailsensors',{ x: [t, t],                y: [arrOf('tail_r'), arrOf('tail_f')] });
+            });
+        }
+
         async function readLoop() {
-            let buffer = new Uint8Array();
             const PKT_SIZE = 131; // 2 header + 32*4 floats + 1 checksum
-            
+            const pktView = new Uint8Array(PKT_SIZE);    // reusable packet buffer
+            const floatView = new DataView(pktView.buffer);
+            ringWrite = ringRead = 0; // reset ring buffer
+
             try {
                 reader = port.readable.getReader();
                 while (true) {
                     const { value, done } = await reader.read();
                     if (done) break;
-                    
-                    let newBuf = new Uint8Array(buffer.length + value.length);
-                    newBuf.set(buffer); newBuf.set(value, buffer.length);
-                    buffer = newBuf;
 
-                    while (buffer.length >= PKT_SIZE) {
-                        if (buffer[0] === 0x55 && buffer[1] === 0xAA) {
-                            const pkt = buffer.slice(0, PKT_SIZE);
-                            buffer = buffer.slice(PKT_SIZE);
-                            
-                            // Checksum (excluding 2 header bytes)
-                            const payload = pkt.slice(2, 130);
-                            let crc = 0;
-                            for (let b of payload) crc ^= b;
-                            
-                            if (crc === pkt[130]) {
-                                rxCount++;
-                                const dv = new DataView(pkt.buffer, pkt.byteOffset, pkt.byteLength);
-                                const v = [];
-                                for (let i = 0; i < 32; i++) v.push(dv.getFloat32(2 + i * 4, true));
-                                
-                                // Mapping based on SerialTelemetry in main.cpp
-                                // 0:lift_r, 1:lift_f, 2:tail_r, 3:tail_f, 4:sp_r, 5:sp_f
-                                // 6:dtar, 7:e, 8:de, 9:s, 10:u
-                                // 11-15: Kp, Ki, Kd, K1, K2
-                                // 16-18: K, t1, L
-                                // 19-21: fcL, fcT, omR
-                                // 22-23: Loff, Toff, 24:isAuto, 25:alphaMan
-                                // 26:u_eq, 27:u_sw, 28:u_sw_i, 29:est_depth, 30:dot_ref, 31:ddot_ref
-                                
-                                const curTime = (Date.now() - startTime) / 1000;
-                                buf.time.push(curTime);
-                                buf.lift_r.push(v[0]); buf.lift_f.push(v[1]);
-                                buf.tail_r.push(v[2]); buf.tail_f.push(v[3]);
-                                buf.sp.push(v[5]); buf.act.push(v[1]);
-                                buf.e.push(v[7]); buf.de.push(v[8]); buf.s.push(v[9]);
-                                buf.u.push(v[10]); buf.u_eq.push(v[26]); buf.u_sw.push(v[27]); buf.u_sw_i.push(v[28]);
-                                buf.dtar.push(v[6]); buf.depth.push(v[29]);
-                                buf.depth_e.push(v[6] - v[29]);
-                                
-                                Object.values(buf).forEach(a => { if(a.length > MAX_POINTS) a.shift(); });
+                    // Đưa dữ liệu vào ring buffer (không allocate mảng mới)
+                    ringPush(value);
 
-                                if (rxCount % 5 === 0) {
-                                    document.getElementById('stat-rx').innerText = rxCount;
-                                    const now = Date.now();
-                                    const freq = 5000 / (now - lastTime);
-                                    document.getElementById('stat-freq').innerText = (freq * 1).toFixed(1);
-                                    lastTime = now;
-                                    
-                                    // Extract values for easier access
-                                    const e = v[7], de = v[8], s = v[9], u_eq = v[26], u_sw = v[27], u_sw_i = v[28];
-                                    const Kp = v[11], Ki = v[12], Kd = v[13], K1 = v[14], K2 = v[15];
-                                    const K = v[16], t1 = v[17];
-                                    const dot_ref = v[30], ddot_ref = v[31];
-                                    
-                                    // Update Math Monitor - Values
-                                    document.getElementById('m-sp').innerText = v[5].toFixed(2) + "°";
-                                    document.getElementById('m-act').innerText = v[1].toFixed(2) + "°";
-                                    document.getElementById('m-e').innerText = e.toFixed(3) + "°";
-                                    document.getElementById('m-de').innerText = de.toFixed(2) + "°/s";
-                                    document.getElementById('m-u').innerText = v[10].toFixed(4);
-                                    document.getElementById('cur-depth').innerText = v[29].toFixed(1);
-
-                                    // Detailed Calculations using LaTeX
-                                    // 1. Sliding Surface: s = Kp*e + Ki*e_int + Kd*de
-                                    let eint_display = 0;
-                                    if (Math.abs(Ki) > 1e-6) {
-                                        eint_display = (s - Kp*e - Kd*de) / Ki;
-                                    }
-                                    const s_tex = `${Kp.toFixed(2)}(${e.toFixed(2)}) + ${Ki.toFixed(2)}(${eint_display.toFixed(2)}) + ${Kd.toFixed(2)}(${de.toFixed(2)}) = ${s.toFixed(4)}`;
-                                    katex.render(s_tex, document.getElementById('math-s-sub'));
-
-                                    // 2. Equivalent Control: u_eq
-                                    const b = K / (t1 || 0.001);
-                                    const a1 = 1 / (t1 || 0.001);
-                                    const alpha_dot = dot_ref - de;
-                                    const ueq_tex = `\\frac{1}{${b.toFixed(2)}} [${a1.toFixed(2)}(${alpha_dot.toFixed(2)}) + (${ddot_ref.toFixed(2)}) + ${(Kp/Kd).toFixed(2)}(${de.toFixed(2)}) + ${(Ki/Kd).toFixed(2)}(${e.toFixed(2)})] = ${u_eq.toFixed(4)}`;
-                                    katex.render(ueq_tex, document.getElementById('math-ueq-sub'));
-
-                                    // 3. Switching Control: u_sw
-                                    const bKd = b * Kd;
-                                    const sign_s = s > 0 ? 1 : (s < 0 ? -1 : 0);
-                                    const term1 = -K1 * Math.sqrt(Math.abs(s)) * sign_s;
-                                    const usw_tex = `\\frac{1}{${bKd.toFixed(2)}} [(${term1.toFixed(3)}) + (${u_sw_i.toFixed(3)})] = ${u_sw.toFixed(4)}`;
-                                    katex.render(usw_tex, document.getElementById('math-usw-sub'));
-                                    
-                                    updatePreview();
+                    while (ringLen() >= PKT_SIZE) {
+                        // Tìm header 0x55 0xAA
+                        if (ringPeek(0) !== 0x55 || ringPeek(1) !== 0xAA) {
+                            // Tìm nhanh byte 0x55 tiếp theo thay vì dịch từng byte
+                            let found = false;
+                            const avail = ringLen();
+                            for (let i = 1; i < avail - 1; i++) {
+                                if (ringPeek(i) === 0x55 && ringPeek(i+1) === 0xAA) {
+                                    ringConsume(i);
+                                    found = true;
+                                    break;
                                 }
-
-                                if (rxCount % 10 === 0) {
-                                    Plotly.update('chart-depth', { x: [buf.time, buf.time], y: [buf.dtar, buf.depth] });
-                                    Plotly.update('chart-depth-err', { x: [buf.time], y: [buf.depth_e] });
-                                    Plotly.update('chart-tracking', { x: [buf.time, buf.time], y: [buf.sp, buf.act] });
-                                    Plotly.update('chart-error', { x: [buf.time], y: [buf.e] });
-                                    Plotly.update('chart-sliding', { x: [buf.time], y: [buf.s] });
-                                    Plotly.update('chart-control', { x: [buf.time], y: [buf.u] });
-                                    Plotly.update('chart-components', { x: [buf.time, buf.time], y: [buf.u_eq, buf.u_sw] });
-                                    Plotly.update('chart-liftsensors', { x: [buf.time, buf.time], y: [buf.lift_r, buf.lift_f] });
-                                    Plotly.update('chart-tailsensors', { x: [buf.time, buf.time], y: [buf.tail_r, buf.tail_f] });
-                                }
-                            } else {
-                                errCount++;
-                                document.getElementById('stat-err').innerText = errCount;
                             }
+                            if (!found) { ringConsume(ringLen() - 1); } // xóa hết trừ byte cuối
+                            continue;
+                        }
+
+                        // Copy vào buffer tái sử dụng
+                        const raw = ringSlice(PKT_SIZE);
+                        for (let i = 0; i < PKT_SIZE; i++) pktView[i] = raw[i];
+
+                        // Checksum
+                        let crc = 0;
+                        for (let i = 2; i < 130; i++) crc ^= pktView[i];
+
+                        if (crc === pktView[130]) {
+                            ringConsume(PKT_SIZE);
+                            rxCount++;
+
+                            const v = new Array(32);
+                            for (let i = 0; i < 32; i++) v[i] = floatView.getFloat32(2 + i * 4, true);
+
+                            // Push vào circular buffers (O(1))
+                            const curTime = (Date.now() - startTime) / 1000;
+                            buf.time.push(curTime);
+                            buf.lift_r.push(v[0]); buf.lift_f.push(v[1]);
+                            buf.tail_r.push(v[2]); buf.tail_f.push(v[3]);
+                            buf.sp.push(v[5]);      buf.act.push(v[1]);
+                            buf.e.push(v[7]);       buf.de.push(v[8]); buf.s.push(v[9]);
+                            buf.u.push(v[10]);      buf.u_eq.push(v[26]); buf.u_sw.push(v[27]); buf.u_sw_i.push(v[28]);
+                            buf.dtar.push(v[6]);    buf.depth.push(v[29]);
+                            buf.depth_e.push(v[6] - v[29]);
+
+                            // ── Update UI mỗi 5 packet (100ms) ──────────
+                            if (rxCount % 5 === 0) {
+                                const now = Date.now();
+                                domSet('stat-rx',   String(rxCount));
+                                domSet('stat-freq',  (5000 / (now - lastTime)).toFixed(1));
+                                lastTime = now;
+
+                                domSet('m-sp',  v[5].toFixed(2) + "°");
+                                domSet('m-act', v[1].toFixed(2) + "°");
+                                domSet('m-e',   v[7].toFixed(3) + "°");
+                                domSet('m-de',  v[8].toFixed(2) + "°/s");
+                                domSet('m-u',   v[10].toFixed(4));
+                                domSet('cur-depth', v[29].toFixed(1));
+
+                                scheduleKatex({ e:v[7], de:v[8], s:v[9], u_eq:v[26], u_sw:v[27], u_sw_i:v[28],
+                                    Kp:v[11], Ki:v[12], Kd:v[13], K1:v[14], K:v[16], t1:v[17],
+                                    dot_ref:v[30], ddot_ref:v[31] });
+                                updatePreview();
+                            }
+
+                            // ── Update chart mỗi 10 packet (200ms) ──────
+                            if (rxCount % 10 === 0) schedulePlot();
+
                         } else {
-                            buffer = buffer.slice(1);
+                            ringConsume(1); // bad CRC, bỏ 1 byte, thử lại
+                            errCount++;
+                            domSet('stat-err', String(errCount));
                         }
                     }
                 }
