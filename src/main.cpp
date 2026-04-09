@@ -426,15 +426,16 @@ void runController()
     static float u_sw_int = 0.0f;
     float sign_s = (s > 0.0f) ? 1.0f : ((s < 0.0f) ? -1.0f : 0.0f);
 
-    // Super-Twisting Algorithm: u_sw = (1/(b*Kd)) * (-K1*sqrt(|s|)*sgn(s) + integral(-K2*sgn(s)*dt))
-    // Thành phần tích phân:
-    u_sw_int = constrain(u_sw_int + K2 * sign_s * DT, -1.0f, 1.0f);
+    // Super-Twisting Algorithm cho hệ gain âm (b < 0):
+    // u_sw_int tích lũy cùng dấu với s để khi chia cho b_Kd (âm) sẽ ra u cùng chiều cần thiết
+    u_sw_int = constrain(u_sw_int + K2 * sign_s * DT, -2.0f, 2.0f);
 
     float u_sw = 0.0f;
     float b_Kd = b * safe_Kd;
     if (fabsf(b_Kd) > 1e-6f)
     {
-        u_sw = (1.0f / b_Kd) * (-K1 * sqrtf(fabsf(s)) * sign_s + u_sw_int);
+        // Loại bỏ dấu trừ trước K1: u_sw = (1/b_Kd) * (K1*sqrt|s|*sign_s + u_sw_int)
+        u_sw = (1.0f / b_Kd) * (K1 * sqrtf(fabsf(s)) * sign_s + u_sw_int);
     }
     u_sw = constrain(u_sw, -PWM_MAX_ABS, PWM_MAX_ABS);
 
