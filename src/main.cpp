@@ -7,6 +7,8 @@
  *    Phương trình trạng thái: α̈ = −a1·α̇ + b·u
  *      a1 = 1/τ₁,  a2 = 0,  b = K/τ₁
  *
+ *  Sai số:
+ *      e= y_d-y
  *  Bù dead-time: Smith Predictor
  *    y_pred(t) = y_measured(t) + y_m(t) − y_m_d(t)
  *    (y_m: model không trễ, y_m_d: model có trễ L)
@@ -17,7 +19,7 @@
  *  Luật điều khiển tổng: u = u_eq + u_sw
  *
  *  Lực tương đương (u_eq) – giải ṡ = 0:
- *    u_eq = (1/b)·(a1·α̇_ctrl + a2·α_ctrl + α̈_ref − (Kp/Kd)·ė − (Ki/Kd)·e)
+ *    u_eq = (1/b)·(a1·α̇_ctrl + a2·α_ctrl + α̈_ref + (Kp/Kd)·ė + (Ki/Kd)·e)
  *
  *  Lực chuyển mạch (u_sw) – Super-Twisting Algorithm:
  *    u_sw = (1/(b·Kd))·(−K1·√|s|·sgn(s) + ∫−K2·sgn(s)·dt)
@@ -407,7 +409,7 @@ void runController()
     static float y_pred_prev = 0.0f, e_int = 0.0f;
     float alpha_actual_dot = (y_pred - y_pred_prev) / DT;
     y_pred_prev = y_pred;
-    float e = alpha_ref - y_pred, de = dot_alpha_ref - alpha_actual_dot;
+    float e = y_pred - alpha_ref, de = alpha_actual_dot - dot_alpha_ref;
     // e_int = constrain(e_int + e * DT, -500.0f, 500.0f);
 
     // if (fabsf(e) > 0.5f) {
@@ -430,13 +432,13 @@ void runController()
     e_int = constrain(e_int + e_int_rate * DT, -5.0f, 5.0f);
 
     float safe_tau1 = (fabsf(tau1) < 1e-4f) ? 1e-4f : tau1;
-    float a1 = 1.0f / safe_tau1, a2 = 0.0f, b = -K / safe_tau1;
+    float a1 = 1.0f / safe_tau1, a2 = 0.0f, b = (-K) / safe_tau1;
 
     float u_eq = 0.0f;
     float safe_Kd = (fabsf(Kd) < 1e-4f) ? ((Kd >= 0.0f) ? 1e-4f : -1e-4f) : Kd;
     if (fabsf(b) > 1e-6f)
     {
-        u_eq = (1.0f / b) * (a1 * alpha_actual_dot + a2 * y_pred + ddot_alpha_ref + (Kp / safe_Kd) * de + (Ki / safe_Kd) * e);
+        u_eq = (1.0f / b) * (a1 * alpha_actual_dot + a2 * y_pred + ddot_alpha_ref - (Kp / safe_Kd) * de - (Ki / safe_Kd) * e);
     }
     u_eq = constrain(u_eq, -PWM_MAX_ABS, PWM_MAX_ABS);
 
