@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Full Order SMC - SOIPDT Model</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Thêm thư viện KaTeX để render công thức Toán học đẹp mắt -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-200 p-4 md:p-6 font-sans selection:bg-blue-500/30">
+
+    <header class="mb-6 flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-800 pb-4 gap-4">
+        <div class="flex items-center gap-3">
+            <svg class="text-blue-500 w-8 h-8 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+            <h1 class="text-xl md:text-2xl font-bold text-white">Full Order SMC - SOIPDT Model</h1>
+        </div>
+        <div class="flex gap-2 w-full md:w-auto">
+            <button id="btn-toggle" class="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-md font-semibold transition bg-emerald-600 hover:bg-emerald-500 text-white">
+                <svg id="icon-play" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <svg id="icon-pause" class="hidden" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                <span id="txt-toggle">Chạy Mô Phỏng</span>
+            </button>
+            <button id="btn-reset" class="flex items-center justify-center gap-2 px-4 py-2 rounded-md font-semibold bg-slate-700 hover:bg-slate-600 transition text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
+                Reset
+            </button>
+        </div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Cột Trái: Cài đặt -->
+        <div class="lg:col-span-4 flex flex-col gap-6 lg:sticky lg:top-6 h-fit">
+            
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+                <h2 class="text-lg font-bold text-blue-400 mb-4 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    Bảng Điều Khiển Tương Tác
+                </h2>
+                
+                <div class="space-y-5 text-sm">
+                    <!-- Mô hình SOIPDT -->
+                    <div class="bg-slate-800/40 p-4 rounded-lg border border-slate-700/50">
+                        <span class="font-semibold text-slate-300 block mb-3">Mô hình: <span class="font-serif italic text-sm text-slate-400">G(s) = Ke<sup>-Ls</sup> / [s(Ts+1)]</span></span>
+                        <div class="space-y-3">
+                            <div>
+                                <div class="flex justify-between mb-1"><label class="text-slate-400 text-xs">Gain (<i>K</i>)</label><span id="val-K" class="font-mono text-blue-400">7.69</span></div>
+                                <input type="range" id="in-K" min="0.1" max="100" step="0.0001" value="7.69" class="w-full accent-blue-500 cursor-pointer" />
+                            </div>
+                            <div>
+                                <div class="flex justify-between mb-1"><label class="text-slate-400 text-xs">Time Const (<i>T</i>)</label><span id="val-T" class="font-mono text-blue-400">1.32</span></div>
+                                <input type="range" id="in-T" min="0.1" max="100" step="0.0001" value="1.32" class="w-full accent-blue-500 cursor-pointer" />
+                            </div>
+                            <div>
+                                <div class="flex justify-between mb-1"><label class="text-slate-400 text-xs">Dead Time (<i>L</i>)</label><span id="val-L" class="font-mono text-blue-400">0.002</span></div>
+                                <input type="range" id="in-L" min="0" max="100" step="0.0001" value="0.002" class="w-full accent-blue-500 cursor-pointer" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PID -->
+                    <div class="bg-slate-800/40 p-4 rounded-lg border border-slate-700/50">
+                        <span class="font-semibold text-slate-300 block mb-3">Mặt Trượt PID</span>
+                        <div class="space-y-3">
+                            <div>
+                                <div class="flex justify-between mb-1"><label class="text-slate-400 text-xs">Tỷ lệ (<i>k<sub>p</sub></i>)</label><span id="val-kp" class="font-mono text-purple-400">5.65</span></div>
+                                <input type="range" id="in-kp" min="0" max="200" step="0.01" value="5.65" class="w-full accent-purple-500 cursor-pointer" />
+                            </div>
+                            <div>
+                                <div class="flex justify-between mb-1"><label class="text-slate-400 text-xs">Tích phân (<i>k<sub>i</sub></i>)</label><span id="val-ki" class="font-mono text-purple-400">16.0</span></div>
+                                <input type="range" id="in-ki" min="0" max="200" step="0.01" value="16.0" class="w-full accent-purple-500 cursor-pointer" />
+                            </div>
+                            <div>
+                                <div class="flex justify-between mb-1"><label class="text-slate-400 text-xs">Vi phân (<i>k<sub>d</sub></i>)</label><span id="val-kd" class="font-mono text-purple-400">1.0</span></div>
+                                <input type="range" id="in-kd" min="0" max="200" step="0.01" value="1.0" class="w-full accent-purple-500 cursor-pointer" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SMC -->
+                    <div class="bg-slate-800/40 p-4 rounded-lg border border-slate-700/50">
+                        <span class="font-semibold text-slate-300 block mb-3">Luật Điều Khiển Tích Phân SMC</span>
+                        <div class="space-y-3">
+                            <div>
+                                <div class="flex justify-between mb-1"><label class="text-slate-400 text-xs">Switching Gain (<i>K<sub>sw</sub></i>)</label><span id="val-Ksw" class="font-mono text-emerald-400">0.5</span></div>
+                                <input type="range" id="in-Ksw" min="0" max="150" step="0.01" value="0.5" class="w-full accent-emerald-500 cursor-pointer" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Setpoint -->
+                    <div class="bg-blue-900/20 p-4 rounded-lg border border-blue-900/50">
+                        <div class="flex justify-between mb-2 items-center">
+                            <label class="font-semibold text-blue-300">Tín hiệu đặt (<i>y<sub>d</sub></i>)</label>
+                            <select id="in-setpoint-type" class="bg-slate-800 text-xs text-slate-300 border border-slate-700 rounded px-2 py-1 outline-none focus:border-blue-500">
+                                <option value="constant">Hằng số</option>
+                                <option value="sine">Hình Sin (Wave)</option>
+                                <option value="square">Xung Vuông</option>
+                            </select>
+                        </div>
+                        <div class="flex justify-between mb-1 mt-3">
+                            <label class="text-slate-400 text-xs">Biên độ / Giá trị</label>
+                            <span id="txt-setpoint-val" class="font-mono text-rose-400 font-bold">10.00</span>
+                        </div>
+                        <input type="range" min="-10" max="20" step="1" id="in-setpoint" value="10" class="w-full accent-rose-500 cursor-pointer" />
+                    </div>
+
+                    <!-- Nhiễu Cảm Biến -->
+                    <div class="bg-yellow-900/20 p-4 rounded-lg border border-yellow-700/50">
+                        <span class="font-semibold text-yellow-500 block mb-3">Môi trường thực tế</span>
+                        <div>
+                            <div class="flex justify-between mb-1"><label class="text-slate-400 text-xs">Nhiễu đo lường cảm biến (Noise)</label><span id="val-noise" class="font-mono text-yellow-400">0.2</span></div>
+                            <input type="range" id="in-noise" min="0" max="2" step="0.01" value="0.2" class="w-full accent-yellow-500 cursor-pointer" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+
+        <!-- Cột Phải: Biểu đồ & Tính toán -->
+        <div class="lg:col-span-8 flex flex-col gap-6">
+            
+            <!-- Panel Tính Toán -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg relative overflow-hidden">
+                <div class="absolute -top-4 -right-4 p-4 opacity-5 pointer-events-none">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="150" height="150" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><path d="M16 10h.01"></path><path d="M12 10h.01"></path><path d="M8 10h.01"></path><path d="M12 14h.01"></path><path d="M8 14h.01"></path><path d="M12 18h.01"></path><path d="M8 18h.01"></path></svg>
+                </div>
+                <h2 class="text-lg font-bold text-amber-400 mb-4 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                    Chi tiết Tính Toán Tại: <i>t</i> = <span id="out-time" class="font-mono bg-slate-800 px-2 py-0.5 rounded text-amber-300">0.00</span>s
+                </h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
+                    <div class="space-y-3">
+                        <div class="bg-slate-800/60 p-3 rounded-lg border border-slate-700/50">
+                            <h3 class="text-xs text-slate-400 uppercase tracking-wider mb-2 font-semibold">1. Trạng thái Hệ thống</h3>
+                            <div class="font-serif text-[15px] space-y-1">
+                                <p><i>y</i>(<i>t</i>) = <span id="out-y" class="font-mono text-blue-400">0.0000</span></p>
+                                <p><i>ẏ</i>(<i>t</i>) = <span id="out-dy" class="font-mono text-blue-400">0.0000</span></p>
+                                <p><i>y<sub>d</sub></i>(<i>t</i>) = <span id="out-yd" class="font-mono text-emerald-400">10.0000</span></p>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-800/60 p-3 rounded-lg border border-slate-700/50">
+                            <h3 class="text-xs text-slate-400 uppercase tracking-wider mb-2 font-semibold">2. Động học Sai số</h3>
+                            <div class="font-serif text-[15px] space-y-1">
+                                <p><i>e</i>(<i>t</i>) = <i>y</i> - <i>y<sub>d</sub></i> = <span id="out-e" class="font-mono text-amber-300">0.0000</span></p>
+                                <p><i>ė</i>(<i>t</i>) = <i>ẏ</i> - <i>ẏ<sub>d</sub></i> = <span id="out-de" class="font-mono text-amber-300">0.0000</span></p>
+                                <p>&int; <i>e</i>(<i>t</i>) d<i>t</i> = <span id="out-inte" class="font-mono text-amber-300">0.0000</span></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="bg-slate-800/60 p-3 rounded-lg border border-slate-700/50">
+                            <h3 class="text-xs text-slate-400 uppercase tracking-wider mb-2 font-semibold">3. Mặt Trượt (Sliding Surface)</h3>
+                            <div class="font-serif text-[15px] break-all">
+                                <p class="text-slate-400 text-xs mb-1 font-sans"><i>S</i> = <i>k<sub>p</sub>e</i> + <i>k<sub>i</sub></i> &int;<i>e</i> d<i>t</i> + <i>k<sub>d</sub>ė</i></p>
+                                <p><i>S</i> = (<span id="lbl-kp" class="font-mono">5.0</span>)<span id="out-e-f" class="font-mono text-amber-300">0.0000</span> + (<span id="lbl-ki" class="font-mono">1.0</span>)<span id="out-inte-f" class="font-mono text-amber-300">0.0000</span> + (<span id="lbl-kd" class="font-mono">2.0</span>)<span id="out-de-f" class="font-mono text-amber-300">0.0000</span></p>
+                                <p class="mt-1"><i>S</i> = <span id="out-S" class="font-mono text-purple-400 text-lg font-bold">0.0000</span></p>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-800/60 p-3 rounded-lg border border-slate-700/50">
+                            <h3 class="text-xs text-slate-400 uppercase tracking-wider mb-2 font-semibold">4. Tín hiệu Điều khiển</h3>
+                            <div class="font-serif text-[15px] space-y-1">
+                                <p><i>u<sub>eq</sub></i> = <span id="out-ueq" class="font-mono text-slate-300">0.0000</span></p>
+                                <p><i>u<sub>sw</sub></i> = -<span id="lbl-ksw" class="font-mono">3.0</span> &int; sign(<span id="lbl-S" class="font-mono text-[13px]">0.00</span>) d<i>&tau;</i></p>
+                                <p class="pl-10">= <span id="out-usw" class="font-mono text-rose-400">0.0000</span></p>
+                                <div class="h-px bg-slate-600 my-2 w-full"></div>
+                                <p class="font-bold"><i>u</i> = <i>u<sub>eq</sub></i> + <i>u<sub>sw</sub></i> = <span id="out-u" class="font-mono text-rose-500 text-lg">0.0000</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel Lý thuyết được gộp bên phải phía dưới biểu đồ -->
+            <div id="theory-panel" class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg flex-grow flex flex-col hidden lg:flex">
+                <h2 class="text-lg font-bold text-emerald-400 mb-4 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+                    Cơ sở Toán học (Chứng minh Ổn định Lyapunov)
+                </h2>
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 text-[13px] text-slate-300 leading-relaxed">
+                    <div class="space-y-4">
+                        <div>
+                            <p class="mb-2"><strong class="text-slate-400 font-sans text-sm">1. Mô hình SOIPDT & Sai số bám:</strong><br/>
+                            $$\ddot{y} = -\frac{1}{T}\dot{y} + \frac{K}{T}u$$
+                            $$e = y - y_d \implies \ddot{e} = \ddot{y} - \ddot{y}_d$$</p>
+                        </div>
+                        <div>
+                            <p class="mb-2"><strong class="text-slate-400 font-sans text-sm">2. Mặt trượt (Sliding Surface):</strong><br/>
+                            $$S = k_p e + k_i \int_0^t e(\tau) d\tau + k_d \dot{e}$$
+                            $$\dot{S} = k_p \dot{e} + k_i e + k_d \left( -\frac{1}{T}\dot{y} + \frac{K}{T}u - \ddot{y}_d \right)$$</p>
+                        </div>
+                    </div>
+                    <div>
+                        <p class="mb-1"><strong class="text-slate-400 font-sans text-sm">3. Chứng minh Ổn định Lyapunov:</strong><br/>
+                        Chọn hàm Lyapunov dương xác định: $V = \frac{1}{2}S^2 > 0$<br/>
+                        Để hệ ổn định tiệm cận, cần thỏa mãn tiêu chuẩn hội tụ: $\dot{V} = S\dot{S} < 0$<br/>
+                        Tách tín hiệu điều khiển $u = u_{eq} + u_{sw}$. Ta chọn $u_{eq}$ để triệt tiêu phần động học đã biết ($\dot{S} = 0$ khi chưa xét $u_{sw}$):<br/>
+                        $$u_{eq} = \frac{T}{k_d K} \left( -k_p \dot{e} - k_i e + k_d \ddot{y}_d + \frac{k_d}{T}\dot{y} \right)$$
+                        Lúc này, đạo hàm mặt trượt chỉ còn phụ thuộc vào khâu chuyển mạch: $\dot{S} = \frac{k_d K}{T} u_{sw}$. Thay vào hàm Lyapunov:<br/>
+                        $$\dot{V} = S \left( \frac{k_d K}{T} u_{sw} \right)$$
+                        Nếu chọn khâu chuyển mạch kinh điển $u_{sw} = -K_{sw} \text{sign}(S)$, ta thu được:<br/>
+                        $$\dot{V} = - \frac{k_d K K_{sw}}{T} |S| < 0 \implies \text{Hệ thống ổn định.}$$
+                        <span class="text-emerald-400 italic text-[12px]">*Khâu SMC bậc 2:*</span> <span class="text-[12px] text-slate-400">Trong mô phỏng này, để triệt tiêu hiện tượng dao động (chattering), ta áp dụng tích phân $u_{sw} = -K_{sw} \int \text{sign}(S) d\tau$. Cách này giúp đảm bảo $\dot{S} \to 0$ liên tục, hội tụ mượt mà và giữ nguyên tính bền vững.</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel Biểu đồ -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg flex-grow flex flex-col min-h-[1000px]">
+                <h2 class="text-lg font-bold text-slate-300 mb-4">Đồ thị Thời gian thực (Tự động Scale lưới số)</h2>
+                <div class="flex-grow flex flex-col gap-4">
+                    <!-- Biểu đồ Output (y) -->
+                    <div id="wrapperY" class="relative w-full flex-1 bg-slate-950 rounded-lg border border-slate-800 min-h-[140px]">
+                        <canvas id="canvasY" class="absolute inset-0 w-full h-full"></canvas>
+                        <div class="absolute top-2 right-2 flex items-center gap-3 text-xs bg-slate-900/80 px-2 py-1 rounded">
+                            <span class="flex items-center gap-1"><div class="w-3 h-0.5 bg-blue-500"></div> Output (y)</span>
+                            <span class="flex items-center gap-1"><div class="w-3 h-0.5 border-t border-dashed border-emerald-500"></div> Tín hiệu đặt (y_d)</span>
+                        </div>
+                    </div>
+                    <!-- Biểu đồ Sai số (e) -->
+                    <div id="wrapperE" class="relative w-full flex-1 bg-slate-950 rounded-lg border border-slate-800 min-h-[140px]">
+                        <canvas id="canvasE" class="absolute inset-0 w-full h-full"></canvas>
+                        <div class="absolute top-2 right-2 flex items-center gap-3 text-xs bg-slate-900/80 px-2 py-1 rounded">
+                            <span class="flex items-center gap-1"><div class="w-3 h-0.5 bg-amber-500"></div> Sai số bám (e = y - y_d)</span>
+                        </div>
+                    </div>
+                    <!-- Biểu đồ Mặt trượt (S) -->
+                    <div id="wrapperS" class="relative w-full flex-1 bg-slate-950 rounded-lg border border-slate-800 min-h-[140px]">
+                        <canvas id="canvasS" class="absolute inset-0 w-full h-full"></canvas>
+                        <div class="absolute top-2 right-2 flex items-center gap-3 text-xs bg-slate-900/80 px-2 py-1 rounded">
+                            <span class="flex items-center gap-1"><div class="w-3 h-0.5 bg-purple-500"></div> Mặt trượt (S)</span>
+                        </div>
+                    </div>
+                    <!-- Biểu đồ Control Tín hiệu tổng (u) -->
+                    <div id="wrapperU" class="relative w-full flex-1 bg-slate-950 rounded-lg border border-slate-800 min-h-[140px]">
+                        <canvas id="canvasU" class="absolute inset-0 w-full h-full"></canvas>
+                        <div class="absolute top-2 right-2 flex items-center gap-3 text-xs bg-slate-900/80 px-2 py-1 rounded">
+                            <span class="flex items-center gap-1"><div class="w-3 h-0.5 bg-emerald-500"></div> Tín hiệu điều khiển tổng (u)</span>
+                        </div>
+                    </div>
+                    <!-- Biểu đồ Control Tương đương (ueq) -->
+                    <div id="wrapperUeq" class="relative w-full flex-1 bg-slate-950 rounded-lg border border-slate-800 min-h-[140px]">
+                        <canvas id="canvasUeq" class="absolute inset-0 w-full h-full"></canvas>
+                        <div class="absolute top-2 right-2 flex items-center gap-3 text-xs bg-slate-900/80 px-2 py-1 rounded">
+                            <span class="flex items-center gap-1"><div class="w-3 h-0.5 bg-slate-400"></div> Tín hiệu tương đương (u_eq)</span>
+                        </div>
+                    </div>
+                    <!-- Biểu đồ Control Chuyển mạch (usw) -->
+                    <div id="wrapperUsw" class="relative w-full flex-1 bg-slate-950 rounded-lg border border-slate-800 min-h-[140px]">
+                        <canvas id="canvasUsw" class="absolute inset-0 w-full h-full"></canvas>
+                        <div class="absolute top-2 right-2 flex items-center gap-3 text-xs bg-slate-900/80 px-2 py-1 rounded">
+                            <span class="flex items-center gap-1"><div class="w-3 h-0.5 bg-rose-500"></div> Tín hiệu chuyển mạch (u_sw)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MAIN LOGIC JAVASCRIPT -->
+    <script>
+        // --- STATE & PARAMETERS ---
+        let params = {
+            K: 7.69, T: 1.32, L: 0.002, 
+            kp: 5.65, ki: 16.0, kd: 0.1, 
+            Ksw: 0.5, 
+            setpoint: 10, 
+            setpointType: 'constant', // Loại tín hiệu đặt
+            noise: 0.2, // Biên độ nhiễu
+            dt: 0.002
+        };
+
+        let isRunning = false;
+        let animationFrameId = null;
+        let lastRealTime = 0;
+
+        let simState = { t: 0, y: 0, dy: 0, int_e: 0, e: 0, de: 0, S: 0, u_eq: 0, u_sw: 0, u: 0, int_sign_S: 0, y_d: 0 };
+        let simHistory = { u_history: [], data_t: [], data_y: [], data_yd: [], data_e: [], data_ueq: [], data_usw: [], data_s: [], data_u: [] };
+
+        // --- DOM ELEMENTS ---
+        const btnToggle = document.getElementById('btn-toggle');
+        const btnReset = document.getElementById('btn-reset');
+        const txtToggle = document.getElementById('txt-toggle');
+        const iconPlay = document.getElementById('icon-play');
+        const iconPause = document.getElementById('icon-pause');
+
+        const inputs = {
+            K: document.getElementById('in-K'),
+            T: document.getElementById('in-T'),
+            L: document.getElementById('in-L'),
+            kp: document.getElementById('in-kp'),
+            ki: document.getElementById('in-ki'),
+            kd: document.getElementById('in-kd'),
+            Ksw: document.getElementById('in-Ksw'),
+            setpoint: document.getElementById('in-setpoint'),
+            setpointType: document.getElementById('in-setpoint-type'),
+            noise: document.getElementById('in-noise')
+        };
+
+        const valDisplays = {
+            K: document.getElementById('val-K'),
+            T: document.getElementById('val-T'),
+            L: document.getElementById('val-L'),
+            kp: document.getElementById('val-kp'),
+            ki: document.getElementById('val-ki'),
+            kd: document.getElementById('val-kd'),
+            Ksw: document.getElementById('val-Ksw'),
+            setpoint: document.getElementById('txt-setpoint-val'),
+            noise: document.getElementById('val-noise')
+        };
+
+        const outputs = {
+            time: document.getElementById('out-time'),
+            y: document.getElementById('out-y'),
+            dy: document.getElementById('out-dy'),
+            yd: document.getElementById('out-yd'),
+            e: document.getElementById('out-e'),
+            de: document.getElementById('out-de'),
+            inte: document.getElementById('out-inte'),
+            ef: document.getElementById('out-e-f'),
+            def: document.getElementById('out-de-f'),
+            intef: document.getElementById('out-inte-f'),
+            S: document.getElementById('out-S'),
+            ueq: document.getElementById('out-ueq'),
+            usw: document.getElementById('out-usw'),
+            u: document.getElementById('out-u'),
+            lbl_kp: document.getElementById('lbl-kp'),
+            lbl_ki: document.getElementById('lbl-ki'),
+            lbl_kd: document.getElementById('lbl-kd'),
+            lbl_ksw: document.getElementById('lbl-ksw'),
+            lbl_S: document.getElementById('lbl-S')
+        };
+
+        const wrapperY = document.getElementById('wrapperY');
+        const wrapperE = document.getElementById('wrapperE');
+        const wrapperS = document.getElementById('wrapperS');
+        const wrapperU = document.getElementById('wrapperU');
+        const wrapperUeq = document.getElementById('wrapperUeq');
+        const wrapperUsw = document.getElementById('wrapperUsw');
+        
+        const canvasY = document.getElementById('canvasY');
+        const canvasE = document.getElementById('canvasE');
+        const canvasS = document.getElementById('canvasS');
+        const canvasU = document.getElementById('canvasU');
+        const canvasUeq = document.getElementById('canvasUeq');
+        const canvasUsw = document.getElementById('canvasUsw');
+        
+        const ctxY = canvasY.getContext('2d');
+        const ctxE = canvasE.getContext('2d');
+        const ctxS = canvasS.getContext('2d');
+        const ctxU = canvasU.getContext('2d');
+        const ctxUeq = canvasUeq.getContext('2d');
+        const ctxUsw = canvasUsw.getContext('2d');
+
+        function resizeCanvas() {
+            if (wrapperY && wrapperE && wrapperS && wrapperU && wrapperUeq && wrapperUsw) {
+                canvasY.width = wrapperY.clientWidth;
+                canvasY.height = wrapperY.clientHeight;
+                
+                canvasE.width = wrapperE.clientWidth;
+                canvasE.height = wrapperE.clientHeight;
+
+                canvasS.width = wrapperS.clientWidth;
+                canvasS.height = wrapperS.clientHeight;
+
+                canvasU.width = wrapperU.clientWidth;
+                canvasU.height = wrapperU.clientHeight;
+                
+                canvasUeq.width = wrapperUeq.clientWidth;
+                canvasUeq.height = wrapperUeq.clientHeight;
+                
+                canvasUsw.width = wrapperUsw.clientWidth;
+                canvasUsw.height = wrapperUsw.clientHeight;
+                drawCharts();
+            }
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        Object.keys(inputs).forEach(key => {
+            if (!inputs[key]) return;
+            inputs[key].addEventListener('input', (e) => {
+                if (key === 'setpointType') {
+                    params[key] = e.target.value;
+                } else {
+                    let val = parseFloat(e.target.value);
+                    if (isNaN(val)) val = 0;
+                    params[key] = val;
+                    if (valDisplays[key]) {
+                        valDisplays[key].innerText = val.toFixed(key === 'setpoint' ? 2 : (inputs[key].step.includes('.') ? inputs[key].step.split('.')[1].length : 2));
+                    }
+                }
+                
+                // If paused, we can manually trigger a step to see the change instantly if it's setpoint
+                if (!isRunning && key === 'setpoint') {
+                    simState.y_d = params.setpoint;
+                }
+
+                updateUIData();
+                if (!isRunning) drawCharts();
+            });
+        });
+
+        btnToggle.addEventListener('click', () => {
+            isRunning = !isRunning;
+            if (isRunning) {
+                btnToggle.classList.replace('bg-emerald-600', 'bg-amber-600');
+                btnToggle.classList.replace('hover:bg-emerald-500', 'hover:bg-amber-500');
+                txtToggle.innerText = 'Tạm Dừng';
+                iconPlay.classList.add('hidden');
+                iconPause.classList.remove('hidden');
+                lastRealTime = performance.now();
+                loop(lastRealTime);
+            } else {
+                btnToggle.classList.replace('bg-amber-600', 'bg-emerald-600');
+                btnToggle.classList.replace('hover:bg-amber-500', 'hover:bg-emerald-500');
+                txtToggle.innerText = 'Chạy Mô Phỏng';
+                iconPause.classList.add('hidden');
+                iconPlay.classList.remove('hidden');
+                cancelAnimationFrame(animationFrameId);
+            }
+        });
+
+        btnReset.addEventListener('click', () => {
+            isRunning = false;
+            btnToggle.classList.replace('bg-amber-600', 'bg-emerald-600');
+            btnToggle.classList.replace('hover:bg-amber-500', 'hover:bg-emerald-500');
+            txtToggle.innerText = 'Chạy Mô Phỏng';
+            iconPause.classList.add('hidden');
+            iconPlay.classList.remove('hidden');
+            cancelAnimationFrame(animationFrameId);
+
+            simState = { t: 0, y: 0, dy: 0, int_e: 0, e: 0, de: 0, S: 0, u_eq: 0, u_sw: 0, u: 0, int_sign_S: 0, y_d: params.setpointType === 'constant' ? params.setpoint : 0 };
+            simHistory = { u_history: [], data_t: [], data_y: [], data_yd: [], data_e: [], data_ueq: [], data_usw: [], data_s: [] };
+            
+            updateUIData();
+            ctxY.clearRect(0, 0, canvasY.width, canvasY.height);
+            ctxE.clearRect(0, 0, canvasE.width, canvasE.height);
+            ctxS.clearRect(0, 0, canvasS.width, canvasS.height);
+            ctxUeq.clearRect(0, 0, canvasUeq.width, canvasUeq.height);
+            ctxUsw.clearRect(0, 0, canvasUsw.width, canvasUsw.height);
+        });
+
+        function simulateStep() {
+            const p = params;
+            const s = simState;
+            const h = simHistory;
+            
+            s.t += p.dt;
+            const t = s.t;
+            
+            // --- XỬ LÝ SETPOINT ĐỘNG ---
+            const A = p.setpoint;
+            const omega = 0.5; // Tần số của Sine/Square wave
+            let y_d = 0;
+            let dy_d = 0;
+            let ddy_d = 0;
+
+            if (p.setpointType === 'sine') {
+                y_d = A * Math.sin(omega * t);
+                dy_d = A * omega * Math.cos(omega * t);
+                ddy_d = -A * omega * omega * Math.sin(omega * t);
+            } else if (p.setpointType === 'square') {
+                y_d = Math.sin(omega * t) >= 0 ? A : -A;
+                dy_d = 0; // Đạo hàm của xung vuông xấp xỉ 0 ở mọi nơi trừ điểm chuyển mạch
+                ddy_d = 0;
+            } else { // 'constant'
+                y_d = A;
+                dy_d = 0;
+                ddy_d = 0;
+            }
+
+            s.y_d = y_d; // Lưu để hiển thị UI
+
+            // 1. Trễ (Dead Time L)
+            const delaySteps = Math.max(0, Math.floor(p.L / p.dt));
+            let u_delayed = 0;
+            if (h.u_history.length > delaySteps) {
+                u_delayed = h.u_history[h.u_history.length - delaySteps - 1];
+            }
+            
+            // 2. Vi phân hệ thống SOIPDT: y'' = -(1/T)y' + (K/T)u_delayed
+            const ddy = -(1 / p.T) * s.dy + (p.K / p.T) * u_delayed;
+            s.dy += ddy * p.dt;
+            s.y += s.dy * p.dt;
+            
+            // 3. Sai số động (có xét nhiễu đo lường)
+            // Cảm biến đo đạc có nhiễu ngẫu nhiên. Nhiễu đạo hàm (dy_m) thường lớn hơn nhiều do khuếch đại tần số cao.
+            const noise_y = p.noise * (Math.random() - 0.5) * 2;
+            const noise_dy = p.noise * (Math.random() - 0.5) * 10; 
+            
+            const y_m = s.y + noise_y;
+            const dy_m = s.dy + noise_dy;
+
+            s.e = y_m - y_d;
+            s.de = dy_m - dy_d;
+
+            // --- CƠ CHẾ XẢ TÍCH PHÂN (ANTI-WINDUP) ---
+            let e_int_rate = 0.0;
+            const phi_boundary = 2.0; // Vùng lân cận mặt trượt
+            
+            if (Math.abs(s.S) < phi_boundary) { 
+                // Chỉ tích phân khi gần mặt trượt để triệt tiêu sai số xác lập
+                e_int_rate = s.e;
+            } else {
+                // Khi ở xa mặt trượt, xả bớt tích phân cũ để tránh vọt lố (Overshoot)
+                e_int_rate = -0.5 * s.int_e; 
+            }
+
+            // Cập nhật giá trị tích phân và giới hạn (Saturation) để tránh Windup
+            s.int_e += e_int_rate * p.dt;
+            if (s.int_e > 5.0) s.int_e = 5.0;
+            if (s.int_e < -5.0) s.int_e = -5.0;
+            
+            // 4. Mặt Trượt S
+            s.S = p.kp * s.e + p.ki * s.int_e + p.kd * s.de;
+            
+            // 5. Luật SMC Tích Phân
+            // Thành phần tương đương: S' = 0 (Sử dụng tín hiệu đo được dy_m có nhiễu)
+            s.u_eq = (p.T / (p.kd * p.K)) * (-p.kp * s.de - p.ki * s.e + p.kd * ddy_d + (p.kd / p.T) * dy_m);
+            
+            let sign_S = s.S > 0 ? 1 : (s.S < 0 ? -1 : 0);
+            
+            s.int_sign_S += sign_S * p.dt;
+            
+            s.u_sw = -p.Ksw * s.int_sign_S;
+            
+            s.u = s.u_eq + s.u_sw;
+            
+            if (s.u > 0.85) s.u = 0.85;
+            if (s.u < -0.85) s.u = -0.85;
+            
+            h.u_history.push(s.u);
+            if (h.u_history.length > delaySteps + 10) h.u_history.shift();
+
+            h.data_t.push(s.t);
+            h.data_y.push(s.y);
+            h.data_yd.push(y_d); // Lưu y_d thành mảng lịch sử thay vì số cố định
+            h.data_e.push(s.e);
+            h.data_ueq.push(s.u_eq);
+            h.data_usw.push(s.u_sw);
+            h.data_s.push(s.S);
+            h.data_u.push(s.u);
+            
+            if (h.data_t.length > 5000) {
+                h.data_t.shift();
+                h.data_y.shift();
+                h.data_yd.shift();
+                h.data_e.shift();
+                h.data_ueq.shift();
+                h.data_usw.shift();
+                h.data_s.shift();
+                h.data_u.shift();
+            }
+        }
+
+        function updateUIData() {
+            outputs.time.innerText = simState.t.toFixed(2);
+            outputs.y.innerText = simState.y.toFixed(4);
+            outputs.dy.innerText = simState.dy.toFixed(4);
+            outputs.yd.innerText = simState.y_d.toFixed(4); // Hiển thị giá trị y_d real-time
+            
+            outputs.e.innerText = simState.e.toFixed(4);
+            outputs.ef.innerText = simState.e.toFixed(4);
+
+            outputs.de.innerText = simState.de.toFixed(4);
+            outputs.def.innerText = simState.de.toFixed(4);
+
+            outputs.inte.innerText = simState.int_e.toFixed(4);
+            outputs.intef.innerText = simState.int_e.toFixed(4);
+            
+            outputs.S.innerText = simState.S.toFixed(4);
+            outputs.ueq.innerText = simState.u_eq.toFixed(4);
+            outputs.usw.innerText = simState.u_sw.toFixed(4);
+            outputs.u.innerText = simState.u.toFixed(4);
+
+            outputs.lbl_kp.innerText = params.kp.toFixed(2);
+            outputs.lbl_ki.innerText = params.ki.toFixed(2);
+            outputs.lbl_kd.innerText = params.kd.toFixed(2);
+            outputs.lbl_ksw.innerText = params.Ksw.toFixed(1);
+            outputs.lbl_S.innerText = simState.S.toFixed(2);
+        }
+
+        // --- DRAW CHARTS VỚI TÍNH NĂNG AUTO-SCALE VÀ LƯỚI SỐ ---
+        function drawCharts() {
+            const drawLineChart = (ctx, canvas, dataX, dataY, color, dataTargetArray) => {
+                if (!ctx || dataX.length === 0) return;
+                const width = canvas.width;
+                const height = canvas.height;
+                
+                ctx.clearRect(0, 0, width, height);
+
+                // 1. Tính toán giá trị Max, Min của trục Y (Auto Scale)
+                let yMin = Math.min(...dataY);
+                let yMax = Math.max(...dataY);
+
+                if (dataTargetArray !== undefined && dataTargetArray.length > 0) {
+                    yMin = Math.min(yMin, ...dataTargetArray);
+                    yMax = Math.max(yMax, ...dataTargetArray);
+                }
+
+                let range = yMax - yMin;
+                if (range === 0) {
+                    range = 10;
+                    yMin -= 5;
+                    yMax += 5;
+                } else {
+                    yMin -= range * 0.15; // Mở rộng không gian hiển thị (padding)
+                    yMax += range * 0.15;
+                    range = yMax - yMin;
+                }
+                
+                // 2. Tính toán dải trục X (Thời gian t)
+                const xRange = Math.max(10, dataX[dataX.length - 1] - dataX[0]);
+                const xMax = dataX[dataX.length - 1];
+                const xMin = xMax - xRange;
+
+                // 3. Vẽ Lưới Tọa Độ & Các con số
+                ctx.lineWidth = 1;
+                ctx.fillStyle = '#64748b'; // Màu text
+                ctx.font = '10px Arial';
+
+                // Lưới dọc (Trục hoành X - Thời gian)
+                ctx.strokeStyle = '#1e293b'; // Màu xám tối cho lưới
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                
+                // Tạo bước nhảy cho trục X (Mỗi 2s hoặc tuỳ scale)
+                const xTickStep = Math.max(1, Math.round(xRange / 5)); 
+                let startXTick = Math.ceil(xMin / xTickStep) * xTickStep;
+                for (let tick = startXTick; tick <= xMax; tick += xTickStep) {
+                    const px = ((tick - xMin) / xRange) * width;
+                    ctx.beginPath();
+                    ctx.moveTo(px, 0);
+                    ctx.lineTo(px, height);
+                    ctx.stroke();
+                    ctx.fillText(tick.toFixed(0) + 's', px, height - 2); // Hiển thị số X
+                }
+
+                // Lưới ngang (Trục tung Y - Biên độ)
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                
+                const rawYStep = Math.max(0.01, range / 4);
+                const mag = Math.pow(10, Math.floor(Math.log10(rawYStep)));
+                let yTickStep = Math.ceil(rawYStep / mag) * mag;
+
+                let startYTick = Math.ceil(yMin / yTickStep) * yTickStep;
+                for (let tick = startYTick; tick <= yMax; tick += yTickStep) {
+                    const py = height - ((tick - yMin) / range) * height;
+                    ctx.beginPath();
+                    ctx.moveTo(0, py);
+                    ctx.lineTo(width, py);
+                    ctx.stroke();
+                    
+                    // Hiển thị số Y, tránh đè chữ ở vùng mép trên/dưới
+                    if (py > 10 && py < height - 15) {
+                        ctx.fillText(tick.toFixed(1), 5, py);
+                    }
+                }
+
+                // Vẽ trục trung tâm (đường y = 0) đậm hơn nếu hiển thị trong khung
+                if (yMin <= 0 && yMax >= 0) {
+                    const zeroY = height - ((0 - yMin) / range) * height;
+                    ctx.strokeStyle = '#475569'; 
+                    ctx.beginPath();
+                    ctx.moveTo(0, zeroY);
+                    ctx.lineTo(width, zeroY);
+                    ctx.stroke();
+                    ctx.fillText('0', 5, zeroY);
+                }
+
+                // 4. Vẽ đường Target Line (Setpoint Động) bằng mảng lịch sử (nét đứt)
+                if (dataTargetArray !== undefined && dataTargetArray.length > 0) {
+                    ctx.strokeStyle = '#10b981';
+                    ctx.setLineDash([5, 5]);
+                    ctx.beginPath();
+                    for (let i = 0; i < dataX.length; i++) {
+                        if (dataX[i] < xMin) continue;
+                        const px = ((dataX[i] - xMin) / xRange) * width;
+                        let normalizedY = (dataTargetArray[i] - yMin) / range;
+                        const py = height - (normalizedY * height);
+                        
+                        if (i === 0 || dataX[i-1] < xMin) ctx.moveTo(px, py);
+                        else ctx.lineTo(px, py);
+                    }
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+                
+                // 5. Vẽ nét đồ thị dữ liệu chính
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                
+                for (let i = 0; i < dataX.length; i++) {
+                    if (dataX[i] < xMin) continue;
+                    
+                    const px = ((dataX[i] - xMin) / xRange) * width;
+                    let normalizedY = (dataY[i] - yMin) / range;
+                    const py = height - (normalizedY * height);
+                    
+                    if (i === 0 || dataX[i-1] < xMin) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.stroke();
+            };
+
+            const h = simHistory;
+            if (h.data_t.length > 0) {
+                // Truyền h.data_yd làm đường Setpoint động
+                drawLineChart(ctxY, canvasY, h.data_t, h.data_y, '#3b82f6', h.data_yd);
+                drawLineChart(ctxE, canvasE, h.data_t, h.data_e, '#f59e0b');
+                drawLineChart(ctxS, canvasS, h.data_t, h.data_s, '#a855f7');
+                drawLineChart(ctxU, canvasU, h.data_t, h.data_u, '#10b981');
+                drawLineChart(ctxUeq, canvasUeq, h.data_t, h.data_ueq, '#94a3b8');
+                drawLineChart(ctxUsw, canvasUsw, h.data_t, h.data_usw, '#f43f5e');
+            }
+        }
+
+        // --- MAIN LOOP ---
+        function loop(currentTime) {
+            if (isRunning) {
+                const dtReal = (currentTime - lastRealTime) / 1000;
+                // Chạy nhanh gấp 2 lần thời gian thực (2x) để đồ thị di chuyển mượt
+                const simSteps = Math.floor((dtReal * 2) / params.dt); 
+                
+                for (let i = 0; i < simSteps; i++) {
+                    simulateStep();
+                }
+                
+                if (simSteps > 0) {
+                    if (Math.round(simState.t / params.dt) % 5 === 0) {
+                        updateUIData();
+                    }
+                    drawCharts();
+                    lastRealTime = currentTime;
+                }
+                animationFrameId = requestAnimationFrame(loop);
+            }
+        }
+
+        setTimeout(() => {
+            // Khởi tạo trạng thái đầu tiên nếu Setpoint chưa chạy
+            simState.y_d = params.setpointType === 'constant' ? params.setpoint : 0;
+            resizeCanvas();
+            updateUIData();
+        }, 100);
+
+        document.addEventListener("DOMContentLoaded", function() {
+            renderMathInElement(document.getElementById("theory-panel"), {
+                delimiters: [
+                    {left: "$$", right: "$$", display: true},
+                    {left: "$", right: "$", display: false}
+                ],
+                throwOnError: false
+            });
+        });
+    </script>
+</body>
+</html>

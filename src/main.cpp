@@ -90,9 +90,13 @@ static const int MAX_DELAY_SAMPLES = 2000;
 
 struct SOIPDTModel
 {
-    float K = 1.0f;
-    float tau1 = 5.0f;
-    float L = 1.0f;
+    // float K = 0.06893f;
+    // float tau1 = 1.2244f;
+    // float L = 0.0331f;
+
+    float K = 0.076976f * 100.0f;
+    float tau1 = 1.32f;
+    float L = 0.002f;
 
     float y_k1 = 0.0f;
     float y_k2 = 0.0f;
@@ -234,9 +238,9 @@ volatile float g_Kd = 1.0f;
 volatile float g_K1 = 5.0f;  // Gain của Super-Twisting SMC (√|s|·sign(s))
 volatile float g_K2 = 10.0f; // Gain của Super-Twisting SMC (∫sign(s))
 
-volatile float g_K = 1.0f;
-volatile float g_tau1 = 5.0f;
-volatile float g_L = 1.0f;
+volatile float g_K = 0.06893f;
+volatile float g_tau1 = 1.2244f;
+volatile float g_L = 0.0331f;
 volatile float g_lift_offset = 150.0f;
 volatile float g_tail_offset = 150.0f;
 
@@ -405,12 +409,25 @@ void runController()
     y_pred_prev = y_pred;
     float e = alpha_ref - y_pred, de = dot_alpha_ref - alpha_actual_dot;
     // e_int = constrain(e_int + e * DT, -500.0f, 500.0f);
-    if (fabsf(e) > 0.5f) {
-        e_int += e * DT;
-    }
-    e_int= constrain(e_int, -2.0f, 2.0f);
+
+    // if (fabsf(e) > 0.5f) {
+    //     e_int += e * DT;
+    // }
+    // e_int= constrain(e_int, -2.0f, 2.0f);
 
     float s = Kp * e + Ki * e_int + Kd * de;
+
+    float e_int_rate = 0.0f;
+    float phi_boundary = 2.0f;
+    if (fabsf(s) < phi_boundary)
+    { // chỉ tích phân khi gần mặt trượt
+        e_int_rate = e;
+    }
+    else if (fabsf(e) < 0.5f)
+    {
+        e_int_rate = -0.1f * e_int; // xả dần khi đã xác lập
+    }
+    e_int = constrain(e_int + e_int_rate * DT, -5.0f, 5.0f);
 
     float safe_tau1 = (fabsf(tau1) < 1e-4f) ? 1e-4f : tau1;
     float a1 = 1.0f / safe_tau1, a2 = 0.0f, b = -K / safe_tau1;
@@ -466,7 +483,7 @@ void sensorReadTask(void *param)
     while (true)
     {
         float lifting_raw = g_lift_offset - readLiftingSensorRaw();
-        float tail_raw =  readTailboardSensorRaw() - g_tail_offset;
+        float tail_raw = readTailboardSensorRaw() - g_tail_offset;
         g_lifting_filtered = filterLifting.update(lifting_raw);
         g_tail_filtered = filterTailboard.update(tail_raw);
         g_lifting_raw_val = lifting_raw;

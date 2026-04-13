@@ -243,18 +243,18 @@
 
     <header>
         <div style="display:flex; align-items:center; gap:20px;">
-            <h2 style="margin:0; font-size:1.2rem; color:var(--primary); font-weight: 800;">TRACTOR CONTROL V4</h2>
+            <h2 style="margin:0; font-size:1.2rem; color:var(--primary); font-weight: 800;">Tractor control SOIPDT  Super-Twist Smith Predictor</h2>
             <button id="connectBtn" class="btn-connect">CONNECT SERIAL</button>
             <span id="serialStatus" style="font-size:0.75rem; font-weight:bold; color:var(--danger)">OFFLINE</span>
         </div>
         <div style="font-size:0.8rem; display: flex; gap: 20px; align-items:center;">
-            <div>RX: <span id="stat-rx" style="color:var(--success)">0</span></div>
-            <div>CRC Err: <span id="stat-err" style="color:var(--danger)">0</span></div>
-            <div>Freq: <span id="stat-freq" style="color:var(--warning)">--</span> Hz</div>
-            <div style="width:1px; height:20px; background:var(--border);"></div>
             <button id="recBtn" class="btn-rec">⏺ REC</button>
             <span id="recCounter" class="rec-counter">0 rows</span>
             <button id="saveBtn" class="btn-save" style="display:none;">💾 SAVE CSV</button>
+            <div style="width:1px; height:20px; background:var(--border);"></div>
+            <div>RX: <span id="stat-rx" style="color:var(--success)">0</span></div>
+            <div>CRC Err: <span id="stat-err" style="color:var(--danger)">0</span></div>
+            <div>Freq: <span id="stat-freq" style="color:var(--warning)">--</span> Hz</div>
         </div>
     </header>
 
@@ -276,10 +276,10 @@
 
         <div class="control-group">
             <h3>Plant & Physical (SOIPDT)</h3>
-            <div class="input-row"><label>Gain (K)</label><input type="number" step="0.01" id="in-K" value="1.0"></div>
-            <div class="input-row"><label>Tau 1 (τ₁)</label><input type="number" step="0.01" id="in-t1" value="5.0"></div>
-            <div class="input-row"><label>Dead-time (L)</label><input type="number" step="0.01" id="in-L" value="1.0"></div>
-            <div class="input-row"><label>Lift Offset</label><input type="number" step="1" id="in-liftOffset" value="150"></div>
+            <div class="input-row"><label>Gain (K)</label><input type="number" step="0.0001" id="in-K" value="0.06893"></div>
+            <div class="input-row"><label>Tau 1 (τ₁)</label><input type="number" step="0.0001" id="in-t1" value="1.2244"></div>
+            <div class="input-row"><label>Dead-time (L)</label><input type="number" step="0.0001" id="in-L" value="0.0331"></div>
+            <div class="input-row"><label>Lift Offset</label><input type="number" step="1" id="in-liftOffset" value="155"></div>
             <div class="input-row"><label>Tail Offset</label><input type="number" step="1" id="in-tailOffset" value="150"></div>
         </div>
 
@@ -314,12 +314,12 @@
                 <input type="range" min="0" max="5" step="0.01" id="in-Kd" value="0.50" oninput="document.getElementById('val-Kd').innerText=parseFloat(this.value).toFixed(2)">
             </div>
             <div class="control-slider">
-                <div class="slider-label"><span>K1 (ST Prop Gain)</span><b id="val-K1">5.0</b></div>
-                <input type="range" min="0" max="50" step="0.01" id="in-K1" value="5.0" oninput="document.getElementById('val-K1').innerText=parseFloat(this.value).toFixed(1)">
+                <div class="slider-label"><span>K1 (ST Prop Gain)</span><b id="val-K1">5.00</b></div>
+                <input type="range" min="0" max="50" step="0.01" id="in-K1" value="5.0" oninput="document.getElementById('val-K1').innerText=parseFloat(this.value).toFixed(2)">
             </div>
             <div class="control-slider">
-                <div class="slider-label"><span>K2 (ST Int Gain)</span><b id="val-K2">10.0</b></div>
-                <input type="range" min="0" max="100" step="0.01" id="in-K2" value="10.0" oninput="document.getElementById('val-K2').innerText=parseFloat(this.value).toFixed(1)">
+                <div class="slider-label"><span>K2 (ST Int Gain)</span><b id="val-K2">10.00</b></div>
+                <input type="range" min="0" max="100" step="0.01" id="in-K2" value="10.0" oninput="document.getElementById('val-K2').innerText=parseFloat(this.value).toFixed(2)">
             </div>
         </div>
 
