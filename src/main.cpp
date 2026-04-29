@@ -48,16 +48,16 @@
 #include <ESP32Servo.h>
 
 // I2C cho ADS1115
-#define PIN_SDA 25
-#define PIN_SCL 26
+#define PIN_SDA 26
+#define PIN_SCL 25
 
 // H-bridge: 2 kênh PWM độc lập
-#define PIN_MOTOR_IN1 18 // chân PWM kênh thuận
-#define PIN_MOTOR_IN2 19 // chân PWM kênh nghịch
+#define PIN_MOTOR_IN1 33 // chân PWM kênh thuận
+#define PIN_MOTOR_IN2 32 // chân PWM kênh nghịch
 
 #define PWM_FREQ_HZ 20000
 #define PWM_BITS 10
-#define PWM_MAX_ABS 0.85f
+#define PWM_MAX_ABS 0.95f
 
 Adafruit_ADS1115 liftingsensor;
 Adafruit_ADS1115 tailboardsensor;
@@ -173,6 +173,56 @@ struct ReferenceFilter
 
 ReferenceFilter refFilter;
 
+struct MedianFilter
+{
+    // N=7: lag chỉ 3 sample (6ms @ 500Hz), đủ loại spike 3 sample liên tiếp
+    // Delta rejection xử lý spike đơn trước khi vào buffer → N nhỏ vẫn sạch
+    static const int N = 7;
+    float buf[N];
+    int idx;
+    float last_out;
+    float threshold; // ngưỡng thay đổi tối đa hợp lệ mỗi sample
+
+    void init(float _threshold = 2.0f)
+    {
+        idx = 0;
+        last_out = 0.0f;
+        threshold = _threshold;
+        for (int i = 0; i < N; i++)
+            buf[i] = 0.0f;
+    }
+
+    float update(float x)
+    {
+        // Nếu vượt threshold → không dùng x thô,
+        // nhưng last_out vẫn drift dần về phía x để không kẹt mãi
+        if (fabsf(x - last_out) > threshold)
+            x = last_out + copysignf(threshold * 0.5f, x - last_out);
+        //        ↑ trượt dần về phía x, tốc độ = threshold/2 mỗi sample
+
+        buf[idx] = x;
+        idx = (idx + 1) % N;
+
+        float tmp[N];
+        for (int i = 0; i < N; i++)
+            tmp[i] = buf[i];
+        for (int i = 1; i < N; i++)
+        {
+            float key = tmp[i];
+            int j = i - 1;
+            while (j >= 0 && tmp[j] > key)
+            {
+                tmp[j + 1] = tmp[j];
+                j--;
+            }
+            tmp[j + 1] = key;
+        }
+
+        last_out = tmp[N / 2];
+        return last_out;
+    }
+};
+
 // ────────────────────────────────────────────────────────────────────
 //  BỘ LỌC THÔNG THẤP BẬC 2 (2nd Order LPF - Butterworth)
 // ────────────────────────────────────────────────────────────────────
@@ -208,17 +258,20 @@ struct LPF2ndOrder
 
 LPF2ndOrder filterLifting;
 LPF2ndOrder filterTailboard;
+MedianFilter medianLifting;
+MedianFilter medianTailboard;
+LPF2ndOrder filterAlpha_actual_dot;
 
 // ────────────────────────────────────────────────────────────────────
 //  BIẾN TOÀN CỤC – TRẠNG THÁI HỆ THỐNG
 // ────────────────────────────────────────────────────────────────────
-volatile float g_liftingangle = 40.0f;
+volatile float g_liftingangle = 40.0f; 
 volatile float g_tailboardangle = 0.0f;
 volatile float g_lifting_filtered = 40.0f;
 volatile float g_tail_filtered = 0.0f;
 volatile float g_depth_target = 100.0f;
 volatile float g_setpoint = 20.0f;
-volatile bool g_is_auto = true;
+volatile bool g_is_auto = false;
 volatile float g_alpha_manual = 20.0f;
 volatile float g_e = 0.0f;
 volatile float g_de = 0.0f;
@@ -228,23 +281,26 @@ volatile float g_u_eq = 0.0f;
 volatile float g_u_sw = 0.0f;
 volatile float g_u_sw_i = 0.0f;
 volatile float g_estimate_depth = 0.0f;
+volatile float g_y_pred = 0.0f;
+volatile float g_dot_alpha_actual_raw = 0.0f;
 volatile float g_dot_alpha_ref = 0.0f;
 volatile float g_ddot_alpha_ref = 0.0f;
 
 // ────────────────────────────────────────────────────────────────────
 //  THAM SỐ ĐIỀU KHIỂN
 // ────────────────────────────────────────────────────────────────────
-volatile float g_Kp = 2.8f;
-volatile float g_Ki = 4.0f;
-volatile float g_Kd = 1.0f;
-volatile float g_K1 = 5.0f;  // Gain của Super-Twisting SMC (√|s|·sign(s))
-volatile float g_K2 = 10.0f; // Gain của Super-Twisting SMC (∫sign(s))
+volatile float g_Kp = 1.8f;//0.74f; // 1.4 //1.81
+volatile float g_Ki = 1.5f;//0.4f; // 0.5 //1.5
+volatile float g_Kd = 1.33;//0.86f; // 0.57/0.69
+volatile float g_K1 = 3.7f;//1.2f; // 0.47Gain của Super-Twisting SMC (√|s|·sign(s)) //1.24
+volatile float g_K2 = 0.5f;//0.4f; // 0.89Gain của Super-Twisting SMC (∫sign(s)) //0,5
 
-volatile float g_K = 0.06893f;
+volatile float g_K = 35.0f;//0.076976f * 100.0f; //35
+// volatile float g_K = 0.146976f * 100.0f;
 volatile float g_tau1 = 1.2244f;
 volatile float g_L = 0.0331f;
-volatile float g_lift_offset = 150.0f;
-volatile float g_tail_offset = 150.0f;
+volatile float g_lift_offset = 266.6f;
+volatile float g_tail_offset = 126.43f;
 
 volatile bool g_model_dirty = true;
 
@@ -278,6 +334,7 @@ float readLiftingSensorRaw()
 {
     int16_t adc = liftingsensor.getLastConversionResults();
     float voltage = liftingsensor.computeVolts(adc);
+    // Serial.print(voltage);
     return (84.22851f * voltage);
 }
 
@@ -286,6 +343,22 @@ float readTailboardSensorRaw()
     int16_t adc = tailboardsensor.getLastConversionResults();
     float voltage = tailboardsensor.computeVolts(adc);
     return (61.0351f * voltage);
+}
+
+const float C_B2 = -0.03521f, C_B1 = 5.36830f, C_B0 = -48.1255f;
+const float C_D2 = -0.03691f, C_D1 = 9.84580f, C_D0 = -75.4150f;
+const float GAIN_DD_DB = 1.7314f; // d(depth)/d(beta)  mm/mm
+const float GAIN_DA_DD = 0.1172f; // d(alpha)/d(depth) °/mm
+
+float get_alpha_ref(float alpha, float beta_actual, float depth_target)
+{
+    float beta_pred = C_B2 * alpha * alpha + C_B1 * alpha + C_B0;
+    float delta_beta = beta_actual - beta_pred; // terrain signal
+    float depth_nom = C_D2 * alpha * alpha + C_D1 * alpha + C_D0;
+    float depth_est = depth_nom + GAIN_DD_DB * delta_beta; // compensated depth
+    float depth_err = depth_target - depth_est;
+    float alpha_ref = alpha + GAIN_DA_DD * depth_err; // incremental correction
+    return fmaxf(11.0f, fminf(27.0f, alpha_ref));
 }
 
 double calculate_alpha(double depthtarget, double tailboardangle)
@@ -374,17 +447,47 @@ void runController()
     else
         return;
 
-    float sp_raw = is_auto ? (float)calculate_alpha(depth_target, tailangle) : alpha_manual;
+    // float sp_raw = is_auto ? (float)calculate_alpha(depth_target, tailangle) : alpha_manual;
+    float sp_raw = is_auto ? (float)get_alpha_ref(liftingangle, tailangle, depth_target) : alpha_manual;
     g_sp_raw_val = sp_raw;
 
+    // ── STATICS – khai báo tập trung để dễ quản lý ──────────────────
+    static float e_int    = 0.0f;
+    static float u_sw_int = 0.0f;
+    static float u_prev   = 0.0f;
+    static float y_pred_prev = 0.0f;
+    static bool  prev_is_auto = false;
+    static bool  first_run    = true;
+
+    // ── KHỞI TẠO / ĐỔI CHẾ ĐỘ ─────────────────────────────────────
+    // Chỉ reset khi lần đầu chạy hoặc khi chuyển manual↔auto.
+    // Việc reset đặt x1 về vị trí THỰC của tay đòn (không phải target),
+    // để filter ramp mượt từ vị trí hiện tại → setpoint mới.
+    bool mode_changed = (is_auto != prev_is_auto);
+    if (first_run || mode_changed)
+    {
+        refFilter.x1      = liftingangle; // bắt đầu từ vị trí thực, không snap về target
+        refFilter.x2      = 0.0f;
+        e_int             = 0.0f;
+        u_sw_int          = 0.0f;
+        y_pred_prev       = liftingangle;
+        first_run         = false;
+    }
+    prev_is_auto = is_auto;
+
+    // ── REFERENCE FILTER – để ramp tự nhiên, KHÔNG snap ─────────────
+    // ReferenceFilter bậc 2 (ω, ζ=1) sẽ tự tạo quỹ đạo mượt:
+    //   alpha_ref  → vị trí reference smooth
+    //   dot_alpha_ref  → vận tốc feedforward (Kd dùng)
+    //   ddot_alpha_ref → gia tốc feedforward (u_eq dùng)
     ReferenceFilter::FilterOutput refOut = refFilter.update(sp_raw, DT);
     float alpha_ref = refOut.val, dot_alpha_ref = refOut.dot, ddot_alpha_ref = refOut.ddot;
 
     if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(5)) == pdTRUE)
     {
-        g_setpoint = alpha_ref;
-        g_dot_alpha_ref = dot_alpha_ref;   // Bổ sung dòng này
-        g_ddot_alpha_ref = ddot_alpha_ref; // Bổ sung dòng này
+        g_setpoint      = alpha_ref;
+        g_dot_alpha_ref  = dot_alpha_ref;
+        g_ddot_alpha_ref = ddot_alpha_ref;
         g_tailboardangle = tailangle;
         xSemaphoreGive(g_mutex);
     }
@@ -401,16 +504,42 @@ void runController()
         g_model_nd.init(DT);
     }
 
-    static float u_prev = 0.0f;
-    float y_m = g_model_nd.step(u_prev, DT);
+    float y_m   = g_model_nd.step(u_prev, DT);
     float y_m_d = g_model_wd.step(u_prev, DT);
     float y_pred = liftingangle + (y_m - y_m_d);
 
-    static float y_pred_prev = 0.0f, e_int = 0.0f;
-    float alpha_actual_dot = (y_pred - y_pred_prev) / DT;
-    y_pred_prev = y_pred;
+    // // static float y_pred_prev = 0.0f;
+    // // float alpha_actual_dot_raw = (y_pred - y_pred_prev) / DT;
+    // // g_dot_alpha_actual_raw = alpha_actual_dot_raw; // Update global for telemetry
+    // // float alpha_actual_dot = filterAlpha_actual_dot.update(alpha_actual_dot_raw);
+    // // y_pred_prev = y_pred;
+
+    float delta_y = y_pred - y_pred_prev;
+
+    // --- BẮT ĐẦU VÙNG CHẾT (DEADBAND) ---
+    // Ngưỡng 0.015 độ được chọn vì nó lớn hơn bước nhảy nhiễu ~0.01 độ của ADC
+    if (fabsf(delta_y) < 0.02f)
+    {
+        delta_y = 0.0f;
+        // Chú ý cực kỳ quan trọng: Ở đây ta KHÔNG cập nhật y_pred_prev.
+        // Việc này giúp các di chuyển rất nhỏ, chậm (nhỏ hơn 0.015 mỗi chu kỳ)
+        // vẫn được cộng dồn lại qua các vòng lặp cho đến khi đủ lớn để vượt ngưỡng.
+    }
+    else
+    {
+        y_pred_prev = y_pred; // Chỉ cập nhật mốc lịch sử khi góc thực sự dịch chuyển
+    }
+
+    // --- KẾT THÚC VÙNG CHẾT ---
+
+    float alpha_actual_dot_raw = delta_y / DT;
+    g_dot_alpha_actual_raw = alpha_actual_dot_raw; // Update global for telemetry
+    float alpha_actual_dot = filterAlpha_actual_dot.update(alpha_actual_dot_raw);
+
     float e = y_pred - alpha_ref, de = alpha_actual_dot - dot_alpha_ref;
-    // e_int = constrain(e_int + e * DT, -500.0f, 500.0f);
+
+    e = constrain(e, -40.0f, 40.0f);
+    e_int = constrain(e_int + e * DT, -2.0f, 2.0f);
 
     // if (fabsf(e) > 0.5f) {
     //     e_int += e * DT;
@@ -419,17 +548,16 @@ void runController()
 
     float s = Kp * e + Ki * e_int + Kd * de;
 
-    float e_int_rate = 0.0f;
-    float phi_boundary = 2.0f;
-    if (fabsf(s) < phi_boundary)
-    { // chỉ tích phân khi gần mặt trượt
-        e_int_rate = e;
-    }
-    else if (fabsf(e) < 0.5f)
-    {
-        e_int_rate = -0.1f * e_int; // xả dần khi đã xác lập
-    }
-    e_int = constrain(e_int + e_int_rate * DT, -5.0f, 5.0f);
+    // float phi_boundary = 1.0f;
+    // if (fabsf(s) < phi_boundary)
+    // {
+    //     e_int += e * DT;
+    // }
+    // else
+    // {
+    //     e_int *= 0.98f; // luôn xả khi ngoài boundary layer
+    // }
+    // e_int = constrain(e_int , -5.0f, 5.0f);
 
     float safe_tau1 = (fabsf(tau1) < 1e-4f) ? 1e-4f : tau1;
     float a1 = 1.0f / safe_tau1, a2 = 0.0f, b = (-K) / safe_tau1;
@@ -442,7 +570,7 @@ void runController()
     }
     u_eq = constrain(u_eq, -PWM_MAX_ABS, PWM_MAX_ABS);
 
-    static float u_sw_int = 0.0f;
+    
     float sign_s = (s > 0.0f) ? 1.0f : ((s < 0.0f) ? -1.0f : 0.0f);
 
     // Super-Twisting Algorithm cho hệ gain âm (b < 0):
@@ -454,7 +582,8 @@ void runController()
     if (fabsf(b_Kd) > 1e-6f)
     {
         // Loại bỏ dấu trừ trước K1: u_sw = (1/b_Kd) * (K1*sqrt|s|*sign_s + u_sw_int)
-        u_sw = (1.0f / b_Kd) * (K1 * sqrtf(fabsf(s)) * sign_s + u_sw_int);
+        // u_sw = (1.0f / b_Kd) * (K1 * sqrtf(fabsf(s)) * sign_s + u_sw_int);
+        u_sw = (1.0f / b_Kd) * (-K1 * sqrtf(fabsf(s)) * sign_s + u_sw_int);
     }
     u_sw = constrain(u_sw, -PWM_MAX_ABS, PWM_MAX_ABS);
 
@@ -473,6 +602,8 @@ void runController()
         g_u_sw = u_sw;
         g_u_sw_i = u_sw_int;
         g_estimate_depth = estimatedepth;
+        g_y_pred = y_pred;                             // Added
+        g_dot_alpha_actual_raw = alpha_actual_dot_raw; // Added
         g_dot_alpha_ref = dot_alpha_ref;
         g_ddot_alpha_ref = ddot_alpha_ref;
         xSemaphoreGive(g_mutex);
@@ -485,11 +616,28 @@ void sensorReadTask(void *param)
     while (true)
     {
         float lifting_raw = g_lift_offset - readLiftingSensorRaw();
+        lifting_raw = constrain(lifting_raw, 0, 40);
         float tail_raw = readTailboardSensorRaw() - g_tail_offset;
-        g_lifting_filtered = filterLifting.update(lifting_raw);
-        g_tail_filtered = filterTailboard.update(tail_raw);
+
+        tail_raw = constrain(tail_raw, 0, 80);
+
+        float lifting_median = medianLifting.update(lifting_raw);
+        float tail_median = medianTailboard.update(tail_raw);
+
+        g_lifting_filtered = filterLifting.update(lifting_median);
+        g_tail_filtered = filterTailboard.update(tail_median);
         g_lifting_raw_val = lifting_raw;
         g_tail_raw_val = tail_raw;
+
+        // Serial.print("lifting_raw: ");
+        // Serial.print(lifting_raw,2);
+        // Serial.print("\tg_lifting_filtered: ");
+        // Serial.print(g_lifting_filtered,2);
+        // Serial.print("\ttail_raw: ");
+        // Serial.print(tail_raw,2);
+        // Serial.print("\tg_tail_filtered: ");
+        // Serial.println(g_tail_filtered,2);
+
         vTaskDelayUntil(&xLastWake, SENSOR_DT_TICKS);
     }
 }
@@ -653,7 +801,7 @@ void setupRoutes()
 // ────────────────────────────────────────────────────────────────────
 //  SERIAL TELEMETRY & TUNING
 // ────────────────────────────────────────────────────────────────────
-volatile float g_fc_lifting = 25.0f, g_fc_tailboard = 25.0f, g_omega_ref = 10.0f;
+volatile float g_fc_lifting = 10.0f, g_fc_tailboard = 10.0f, g_omega_ref = 2.0f;
 
 struct __attribute__((packed)) SerialTelemetry
 {
@@ -679,11 +827,11 @@ void serialTuningTask(void *param)
         if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(5)) == pdTRUE)
         {
             float *v = msg.values;
-            v[0] = g_lifting_raw_val;
+            v[0] = g_y_pred;
             v[1] = g_liftingangle;
             v[2] = g_tail_raw_val;
             v[3] = g_tailboardangle;
-            v[4] = g_sp_raw_val;
+            v[4] = g_dot_alpha_actual_raw;
             v[5] = g_setpoint;
             v[6] = g_depth_target;
             v[7] = g_e;
@@ -776,13 +924,13 @@ void setup()
     {
         liftingsensor.setGain(GAIN_ONE);
         liftingsensor.setDataRate(RATE_ADS1115_860SPS);
-        liftingsensor.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_0_1, true);
+        liftingsensor.startADCReading(ADS1X15_REG_CONFIG_MUX_SINGLE_0, true);
     }
     if (tailboardsensor.begin(0x49))
     {
         tailboardsensor.setGain(GAIN_ONE);
         tailboardsensor.setDataRate(RATE_ADS1115_860SPS);
-        tailboardsensor.startADCReading(ADS1X15_REG_CONFIG_MUX_DIFF_0_1, true);
+        tailboardsensor.startADCReading(ADS1X15_REG_CONFIG_MUX_SINGLE_0, true);
     }
     ESP32PWM::allocateTimer(0);
     ESP32PWM::allocateTimer(1);
@@ -791,9 +939,16 @@ void setup()
     pwmIN1.attachPin(PIN_MOTOR_IN1, PWM_FREQ_HZ, PWM_BITS);
     pwmIN2.attachPin(PIN_MOTOR_IN2, PWM_FREQ_HZ, PWM_BITS);
     g_mutex = xSemaphoreCreateMutex();
-    filterLifting.init(25.0f, 500.0f);
+    filterLifting.init(10.0f, 500.0f);
     filterTailboard.init(25.0f, 500.0f);
-    refFilter.init(10.0f, 1.0f);
+
+    medianLifting.init(11.0f);
+    medianTailboard.init(11.0f);
+    filterAlpha_actual_dot.init(10.0f, 500.0f);
+
+    refFilter.init(2.0f, 1.0f);
+    // Lưu ý: x1/x2 của refFilter sẽ được set về liftingangle thực
+    // ngay lần đầu runController() chạy (first_run logic), nên không cần set ở đây.
     g_model_wd.K = g_K;
     g_model_wd.tau1 = g_tau1;
     g_model_wd.L = g_L;

@@ -264,22 +264,22 @@
             <div class="input-row">
                 <label>Mode</label>
                 <select id="in-mode">
-                    <option value="1">AUTO (Depth)</option>
                     <option value="0">MANUAL (Alpha)</option>
+                    <option value="1">AUTO (Depth)</option>
                 </select>
             </div>
-            <div id="row-dtar" class="input-row"><label>Target Depth (mm)</label><input type="number" step="1" id="in-dtar" value="100"></div>
-            <div id="row-alpha" class="input-row" style="display:none;"><label>Manual Alpha (deg)</label><input type="number" step="0.1" id="in-alpha" value="20.0"></div>
+            <div id="row-dtar" class="input-row" style="display:none;"><label>Target Depth (mm)</label><input type="number" step="1" id="in-dtar" value="100"></div>
+            <div id="row-alpha" class="input-row"><label>Manual Alpha (deg)</label><input type="number" step="0.1" id="in-alpha" value="20.0"></div>
             <div class="stat-line" id="preview-alpha">Predicted Alpha: --</div>
             <div class="stat-line" style="color:var(--success); font-weight: bold;">Current Depth: <span id="cur-depth">--</span> mm</div>
         </div>
 
         <div class="control-group">
             <h3>Plant & Physical (SOIPDT)</h3>
-            <div class="input-row"><label>Gain (K)</label><input type="number" step="0.0001" id="in-K" value="0.06893"></div>
-            <div class="input-row"><label>Tau 1 (τ₁)</label><input type="number" step="0.0001" id="in-t1" value="1.2244"></div>
+            <div class="input-row"><label>Gain (K)</label><input type="number" step="0.0001" id="in-K" value="0.12"></div>
+            <div class="input-row"><label>Tau 1 (τ₁)</label><input type="number" step="0.0001" id="in-t1" value="0.6244"></div>
             <div class="input-row"><label>Dead-time (L)</label><input type="number" step="0.0001" id="in-L" value="0.0331"></div>
-            <div class="input-row"><label>Lift Offset</label><input type="number" step="1" id="in-liftOffset" value="155"></div>
+            <div class="input-row"><label>Lift Offset</label><input type="number" step="1" id="in-liftOffset" value="336.2"></div>
             <div class="input-row"><label>Tail Offset</label><input type="number" step="1" id="in-tailOffset" value="150"></div>
         </div>
 
@@ -303,7 +303,7 @@
             <h3>SMC & Super-Twisting</h3>
             <div class="control-slider">
                 <div class="slider-label"><span>Kp </span><b id="val-Kp">1.40</b></div>
-                <input type="range" min="0" max="10" step="0.01" id="in-Kp" value="1.40" oninput="document.getElementById('val-Kp').innerText=parseFloat(this.value).toFixed(2)">
+                <input type="range" min="0" max="10" step="0.01" id="in-Kp" value="0.3" oninput="document.getElementById('val-Kp').innerText=parseFloat(this.value).toFixed(2)">
             </div>
             <div class="control-slider">
                 <div class="slider-label"><span>Ki </span><b id="val-Ki">2.00</b></div>
@@ -311,15 +311,15 @@
             </div>
             <div class="control-slider">
                 <div class="slider-label"><span>Kd </span><b id="val-Kd">0.50</b></div>
-                <input type="range" min="0" max="5" step="0.01" id="in-Kd" value="0.50" oninput="document.getElementById('val-Kd').innerText=parseFloat(this.value).toFixed(2)">
+                <input type="range" min="0" max="5" step="0.01" id="in-Kd" value="0.20" oninput="document.getElementById('val-Kd').innerText=parseFloat(this.value).toFixed(2)">
             </div>
             <div class="control-slider">
                 <div class="slider-label"><span>K1 (ST Prop Gain)</span><b id="val-K1">5.00</b></div>
-                <input type="range" min="0" max="50" step="0.01" id="in-K1" value="5.0" oninput="document.getElementById('val-K1').innerText=parseFloat(this.value).toFixed(2)">
+                <input type="range" min="0" max="50" step="0.01" id="in-K1" value="0.5" oninput="document.getElementById('val-K1').innerText=parseFloat(this.value).toFixed(2)">
             </div>
             <div class="control-slider">
                 <div class="slider-label"><span>K2 (ST Int Gain)</span><b id="val-K2">10.00</b></div>
-                <input type="range" min="0" max="100" step="0.01" id="in-K2" value="10.0" oninput="document.getElementById('val-K2').innerText=parseFloat(this.value).toFixed(2)">
+                <input type="range" min="0" max="100" step="0.01" id="in-K2" value="0.10" oninput="document.getElementById('val-K2').innerText=parseFloat(this.value).toFixed(2)">
             </div>
         </div>
 
@@ -374,6 +374,7 @@
         <div id="chart-depth" class="chart-container"></div>
         <div id="chart-depth-err" class="chart-container"></div>
         <div id="chart-tracking" class="chart-container"></div>
+        <div id="chart-alphadot" class="chart-container"></div>
         <div id="chart-error" class="chart-container"></div>
         <div id="chart-sliding" class="chart-container"></div>
         <div id="chart-control" class="chart-container"></div>
@@ -385,8 +386,53 @@
     <script>
         let port, reader;
         let rxCount = 0, errCount = 0, lastTime = Date.now();
+        let hasSynced = false; // Flag for initial synchronization
         const MAX_POINTS = 500;
         const startTime = Date.now();
+
+        function syncInputsFromPacket(v) {
+            console.log("Syncing inputs from device...");
+            document.getElementById('in-dtar').value = v[6].toFixed(0);
+            
+            document.getElementById('in-Kp').value = v[11].toFixed(2);
+            document.getElementById('val-Kp').innerText = v[11].toFixed(2);
+            
+            document.getElementById('in-Ki').value = v[12].toFixed(2);
+            document.getElementById('val-Ki').innerText = v[12].toFixed(2);
+            
+            document.getElementById('in-Kd').value = v[13].toFixed(2);
+            document.getElementById('val-Kd').innerText = v[13].toFixed(2);
+            
+            document.getElementById('in-K1').value = v[14].toFixed(2);
+            document.getElementById('val-K1').innerText = v[14].toFixed(2);
+            
+            document.getElementById('in-K2').value = v[15].toFixed(2);
+            document.getElementById('val-K2').innerText = v[15].toFixed(2);
+            
+            document.getElementById('in-K').value = v[16].toFixed(4);
+            document.getElementById('in-t1').value = v[17].toFixed(4);
+            document.getElementById('in-L').value = v[18].toFixed(4);
+            
+            document.getElementById('in-fcL').value = v[19];
+            document.getElementById('val-fcL').innerText = v[19];
+            
+            document.getElementById('in-fcT').value = v[20];
+            document.getElementById('val-fcT').innerText = v[20];
+            
+            document.getElementById('in-omR').value = v[21].toFixed(1);
+            document.getElementById('val-omR').innerText = v[21].toFixed(1);
+            
+            document.getElementById('in-liftOffset').value = v[22].toFixed(1);
+            document.getElementById('in-tailOffset').value = v[23].toFixed(1);
+            
+            const isAuto = v[24] > 0.5;
+            document.getElementById('in-mode').value = isAuto ? "1" : "0";
+            document.getElementById('row-dtar').style.display = isAuto ? 'flex' : 'none';
+            document.getElementById('row-alpha').style.display = isAuto ? 'none' : 'flex';
+            
+            document.getElementById('in-alpha').value = v[25].toFixed(1);
+            updatePreview();
+        }
 
         // ── CSV Recording ────────────────────────────────────────────────
         let csvRows = [];       // mỗi phần tử là 1 mảng số thô
@@ -396,7 +442,7 @@
 
         const CSV_HEADER = [
             'time_s',
-            'lift_raw','lift_filt','tail_raw','tail_filt','sp_raw','sp_ref',
+            'y_pred','lift_filt','tail_raw','tail_filt','dot_alpha_raw','sp_ref',
             'depth_target','e','de','s','u',
             'Kp','Ki','Kd','K1','K2',
             'K','tau1','L',
@@ -466,7 +512,7 @@
             }
         }
 
-        const BUF_KEYS = ['time','sp','act','e','de','s','u','u_eq','u_sw','u_sw_i','lift_r','lift_f','tail_r','tail_f','dtar','depth','depth_e'];
+        const BUF_KEYS = ['time','sp','act','e','de','s','u','u_eq','u_sw','u_sw_i','y_pred','lift_f','tail_r','tail_f','dtar','depth','depth_e','dot_ref','dot_act','dot_raw'];
         const buf = {};
         BUF_KEYS.forEach(k => buf[k] = new CircBuf(MAX_POINTS));
 
@@ -553,7 +599,8 @@
         function initCharts() {
             createChart('chart-depth', 'DEPTH TRACKING (mm)', [{ name: 'Target (dtar)', color: '#00a8ff', dash: 'dash' }, { name: 'Actual', color: '#4cd137' }]);
             createChart('chart-depth-err', 'DEPTH ERROR (mm)', [{ name: 'Error (dtar-depth)', color: '#e84118' }]);
-            createChart('chart-tracking', 'ALPHA TRACKING (deg)', [{ name: 'Setpoint (α_ref)', color: '#00a8ff', dash: 'dash' }, { name: 'Actual (α_filt)', color: '#4cd137' }]);
+            createChart('chart-tracking', 'ALPHA TRACKING (deg)', [{ name: 'Setpoint (α_ref)', color: '#00a8ff', dash: 'dash' }, { name: 'Predicted (y_pred)', color: '#f1c40f', w: 1 }, { name: 'Actual (α_filt)', color: '#4cd137' }]);
+            createChart('chart-alphadot', 'ALPHA DOT (deg/s)', [{ name: 'Ref (α̇_ref)', color: '#00a8ff', dash: 'dash' }, { name: 'Actual Raw (α̇_raw)', color: '#e84118', w: 1 }, { name: 'Actual Filt (α̇_filt)', color: '#4cd137' }]);
             createChart('chart-error', 'TRACKING ERROR', [{ name: 'Error (e)', color: '#e84118' }, { name: 'd_Error (de)', color: '#9c88ff', w: 1 }]);
             createChart('chart-sliding', 'SLIDING SURFACE', [{ name: 'Sliding (s)', color: '#f1c40f' }]);
             createChart('chart-control', 'CONTROL OUTPUT (u)', [{ name: 'Total Output', color: '#fff' }], [-1.1, 1.1]);
@@ -606,12 +653,13 @@
                 const arrOf = k => buf[k].toArray();
                 Plotly.update('chart-depth',      { x: [t, t],                y: [arrOf('dtar'), arrOf('depth')] });
                 Plotly.update('chart-depth-err',  { x: [t],                   y: [arrOf('depth_e')] });
-                Plotly.update('chart-tracking',   { x: [t, t],                y: [arrOf('sp'), arrOf('act')] });
+                Plotly.update('chart-tracking',   { x: [t, t, t],             y: [arrOf('sp'), arrOf('y_pred'), arrOf('act')] });
+                Plotly.update('chart-alphadot',   { x: [t, t, t],             y: [arrOf('dot_ref'), arrOf('dot_raw'), arrOf('dot_act')] });
                 Plotly.update('chart-error',      { x: [t],                   y: [arrOf('e')] });
                 Plotly.update('chart-sliding',    { x: [t],                   y: [arrOf('s')] });
                 Plotly.update('chart-control',    { x: [t],                   y: [arrOf('u')] });
                 Plotly.update('chart-components', { x: [t, t],                y: [arrOf('u_eq'), arrOf('u_sw')] });
-                Plotly.update('chart-liftsensors',{ x: [t, t],                y: [arrOf('lift_r'), arrOf('lift_f')] });
+                Plotly.update('chart-liftsensors',{ x: [t, t],                y: [arrOf('y_pred'), arrOf('lift_f')] });
                 Plotly.update('chart-tailsensors',{ x: [t, t],                y: [arrOf('tail_r'), arrOf('tail_f')] });
             });
         }
@@ -663,16 +711,24 @@
                             const v = new Array(32);
                             for (let i = 0; i < 32; i++) v[i] = floatView.getFloat32(2 + i * 4, true);
 
+                            // Initial sync from device
+                            if (!hasSynced) {
+                                syncInputsFromPacket(v);
+                                hasSynced = true;
+                            }
+
                             // Push vào circular buffers (O(1))
                             const curTime = (Date.now() - startTime) / 1000;
                             buf.time.push(curTime);
-                            buf.lift_r.push(v[0]); buf.lift_f.push(v[1]);
+                            buf.y_pred.push(v[0]); buf.lift_f.push(v[1]);
                             buf.tail_r.push(v[2]); buf.tail_f.push(v[3]);
                             buf.sp.push(v[5]);      buf.act.push(v[1]);
                             buf.e.push(v[7]);       buf.de.push(v[8]); buf.s.push(v[9]);
                             buf.u.push(v[10]);      buf.u_eq.push(v[26]); buf.u_sw.push(v[27]); buf.u_sw_i.push(v[28]);
                             buf.dtar.push(v[6]);    buf.depth.push(v[29]);
                             buf.depth_e.push(v[6] - v[29]);
+                            buf.dot_ref.push(v[30]); buf.dot_act.push(v[8] + v[30]); // de = dot_act - dot_ref => dot_act = de + dot_ref
+                            buf.dot_raw.push(v[4]);
 
                             // ── Ghi CSV nếu đang record ──────────────────
                             if (isRecording) {
@@ -772,11 +828,13 @@
                 if (reader) await reader.cancel();
                 await port.close();
                 port = null;
+                hasSynced = false; // Reset sync flag on disconnect
                 document.getElementById('connectBtn').innerText = "CONNECT SERIAL";
                 document.getElementById('serialStatus').innerText = "OFFLINE";
                 document.getElementById('serialStatus').style.color = "var(--danger)";
                 return;
             }
+            hasSynced = false; // Ensure reset before new connection
             try {
                 port = await navigator.serial.requestPort();
                 await port.open({ baudRate: 115200 });

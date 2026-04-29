@@ -94,7 +94,7 @@
                     <!-- Setpoint -->
                     <div class="bg-blue-900/20 p-4 rounded-lg border border-blue-900/50">
                         <div class="flex justify-between mb-2 items-center">
-                            <label class="font-semibold text-blue-300">Tín hiệu đặt (<i>y<sub>d</sub></i>)</label>
+                            <label class="font-semibold text-blue-300">Góc tham chiếu ($\alpha_{ref}$)</label>
                             <select id="in-setpoint-type" class="bg-slate-800 text-xs text-slate-300 border border-slate-700 rounded px-2 py-1 outline-none focus:border-blue-500">
                                 <option value="constant">Hằng số</option>
                                 <option value="sine">Hình Sin (Wave)</option>
@@ -112,8 +112,16 @@
                     <div class="bg-yellow-900/20 p-4 rounded-lg border border-yellow-700/50">
                         <span class="font-semibold text-yellow-500 block mb-3">Môi trường thực tế</span>
                         <div>
-                            <div class="flex justify-between mb-1"><label class="text-slate-400 text-xs">Nhiễu đo lường cảm biến (Noise)</label><span id="val-noise" class="font-mono text-yellow-400">0.2</span></div>
-                            <input type="range" id="in-noise" min="0" max="2" step="0.01" value="0.2" class="w-full accent-yellow-500 cursor-pointer" />
+                            <div class="flex justify-between mb-1"><label class="text-slate-400 text-xs">Nhiễu đo lường cảm biến (Noise)</label><span id="val-noise" class="font-mono text-yellow-400">0.05</span></div>
+                            <input type="range" id="in-noise" min="0" max="2" step="0.01" value="0.05" class="w-full accent-yellow-500 cursor-pointer" />
+                        </div>
+                        <div class="mt-3 flex items-center justify-between">
+                            <label class="text-slate-400 text-xs">Bật Lọc Median (Khử xung)</label>
+                            <input type="checkbox" id="in-use-median" class="accent-yellow-500 cursor-pointer h-4 w-4" />
+                        </div>
+                        <div class="mt-2 flex items-center justify-between">
+                            <label class="text-slate-400 text-xs">Bật Lọc LPF 2nd Order</label>
+                            <input type="checkbox" id="in-use-lpf" class="accent-yellow-500 cursor-pointer h-4 w-4" />
                         </div>
                     </div>
                 </div>
@@ -139,17 +147,17 @@
                         <div class="bg-slate-800/60 p-3 rounded-lg border border-slate-700/50">
                             <h3 class="text-xs text-slate-400 uppercase tracking-wider mb-2 font-semibold">1. Trạng thái Hệ thống</h3>
                             <div class="font-serif text-[15px] space-y-1">
-                                <p><i>y</i>(<i>t</i>) = <span id="out-y" class="font-mono text-blue-400">0.0000</span></p>
-                                <p><i>ẏ</i>(<i>t</i>) = <span id="out-dy" class="font-mono text-blue-400">0.0000</span></p>
-                                <p><i>y<sub>d</sub></i>(<i>t</i>) = <span id="out-yd" class="font-mono text-emerald-400">10.0000</span></p>
+                                <p><i>y<sub>pred</sub></i>(<i>t</i>) = <span id="out-y" class="font-mono text-blue-400">0.0000</span></p>
+                                <p><i>ẏ<sub>pred</sub></i>(<i>t</i>) = <span id="out-dy" class="font-mono text-blue-400">0.0000</span></p>
+                                <p><i>&alpha;<sub>ref</sub></i>(<i>t</i>) = <span id="out-yd" class="font-mono text-emerald-400">10.0000</span></p>
                             </div>
                         </div>
 
                         <div class="bg-slate-800/60 p-3 rounded-lg border border-slate-700/50">
                             <h3 class="text-xs text-slate-400 uppercase tracking-wider mb-2 font-semibold">2. Động học Sai số</h3>
                             <div class="font-serif text-[15px] space-y-1">
-                                <p><i>e</i>(<i>t</i>) = <i>y</i> - <i>y<sub>d</sub></i> = <span id="out-e" class="font-mono text-amber-300">0.0000</span></p>
-                                <p><i>ė</i>(<i>t</i>) = <i>ẏ</i> - <i>ẏ<sub>d</sub></i> = <span id="out-de" class="font-mono text-amber-300">0.0000</span></p>
+                                <p><i>e</i>(<i>t</i>) = <i>y<sub>pred</sub></i> - <i>&alpha;<sub>ref</sub></i> = <span id="out-e" class="font-mono text-amber-300">0.0000</span></p>
+                                <p><i>ė</i>(<i>t</i>) = <i>ẏ<sub>pred</sub></i> - <i>&alpha;̇<sub>ref</sub></i> = <span id="out-de" class="font-mono text-amber-300">0.0000</span></p>
                                 <p>&int; <i>e</i>(<i>t</i>) d<i>t</i> = <span id="out-inte" class="font-mono text-amber-300">0.0000</span></p>
                             </div>
                         </div>
@@ -203,7 +211,7 @@
                         Chọn hàm Lyapunov dương xác định: $V = \frac{1}{2}S^2 > 0$<br/>
                         Để hệ ổn định tiệm cận, cần thỏa mãn tiêu chuẩn hội tụ: $\dot{V} = S\dot{S} < 0$<br/>
                         Tách tín hiệu điều khiển $u = u_{eq} + u_{sw}$. Ta chọn $u_{eq}$ để triệt tiêu phần động học đã biết ($\dot{S} = 0$ khi chưa xét $u_{sw}$):<br/>
-                        $$u_{eq} = \frac{T}{k_d K} \left( -k_p \dot{e} - k_i e + k_d \ddot{y}_d + \frac{k_d}{T}\dot{y} \right)$$
+                        $$u_{eq} = \frac{T}{K} \left( -\frac{k_p}{k_d} \dot{e} - \frac{k_pi}{k_d}  e + \ddot{y}_d + \frac{1}{T}\dot{y} \right)$$
                         Lúc này, đạo hàm mặt trượt chỉ còn phụ thuộc vào khâu chuyển mạch: $\dot{S} = \frac{k_d K}{T} u_{sw}$. Thay vào hàm Lyapunov:<br/>
                         $$\dot{V} = S \left( \frac{k_d K}{T} u_{sw} \right)$$
                         Nếu chọn khâu chuyển mạch kinh điển $u_{sw} = -K_{sw} \text{sign}(S)$, ta thu được:<br/>
@@ -222,15 +230,23 @@
                     <div id="wrapperY" class="relative w-full flex-1 bg-slate-950 rounded-lg border border-slate-800 min-h-[140px]">
                         <canvas id="canvasY" class="absolute inset-0 w-full h-full"></canvas>
                         <div class="absolute top-2 right-2 flex items-center gap-3 text-xs bg-slate-900/80 px-2 py-1 rounded">
-                            <span class="flex items-center gap-1"><div class="w-3 h-0.5 bg-blue-500"></div> Output (y)</span>
-                            <span class="flex items-center gap-1"><div class="w-3 h-0.5 border-t border-dashed border-emerald-500"></div> Tín hiệu đặt (y_d)</span>
+                            <span class="flex items-center gap-1"><div class="w-3 h-0.5 bg-blue-500"></div> Dự báo (&alpha;_pred)</span>
+                            <span class="flex items-center gap-1"><div class="w-3 h-0.5 border-t border-dashed border-emerald-500"></div> Tham chiếu (alpha_ref)</span>
+                        </div>
+                    </div>
+                    <!-- Biểu đồ Vận tốc góc (dy) -->
+                    <div id="wrapperDY" class="relative w-full flex-1 bg-slate-950 rounded-lg border border-slate-800 min-h-[140px]">
+                        <canvas id="canvasDY" class="absolute inset-0 w-full h-full"></canvas>
+                        <div class="absolute top-2 right-2 flex items-center gap-3 text-xs bg-slate-900/80 px-2 py-1 rounded">
+                            <span class="flex items-center gap-1"><div class="w-3 h-0.5 bg-sky-400"></div> Vận tốc góc thực (&alpha;̇_act)</span>
+                            <span class="flex items-center gap-1"><div class="w-3 h-0.5 border-t border-dashed border-emerald-500"></div> Vận tốc góc tham chiếu (&alpha;̇_ref)</span>
                         </div>
                     </div>
                     <!-- Biểu đồ Sai số (e) -->
                     <div id="wrapperE" class="relative w-full flex-1 bg-slate-950 rounded-lg border border-slate-800 min-h-[140px]">
                         <canvas id="canvasE" class="absolute inset-0 w-full h-full"></canvas>
                         <div class="absolute top-2 right-2 flex items-center gap-3 text-xs bg-slate-900/80 px-2 py-1 rounded">
-                            <span class="flex items-center gap-1"><div class="w-3 h-0.5 bg-amber-500"></div> Sai số bám (e = y - y_d)</span>
+                            <span class="flex items-center gap-1"><div class="w-3 h-0.5 bg-amber-500"></div> Sai số bám (e = y_pred - alpha_ref)</span>
                         </div>
                     </div>
                     <!-- Biểu đồ Mặt trượt (S) -->
@@ -269,6 +285,58 @@
 
     <!-- MAIN LOGIC JAVASCRIPT -->
     <script>
+        // --- BỘ LỌC TÍN HIỆU CẢM BIẾN ---
+        class MedianFilter {
+            constructor(N = 7, threshold = 2.0) {
+                this.N = N;
+                this.buf = new Array(N).fill(0.0);
+                this.init(threshold);
+            }
+            init(threshold = 2.0) {
+                this.idx = 0;
+                this.last_out = 0.0;
+                this.threshold = threshold;
+                for (let i = 0; i < this.N; i++) this.buf[i] = 0.0;
+            }
+            update(x) {
+                if (Math.abs(x - this.last_out) > this.threshold) {
+                    x = this.last_out + Math.sign(x - this.last_out) * (this.threshold * 0.5);
+                }
+                this.buf[this.idx] = x;
+                this.idx = (this.idx + 1) % this.N;
+                let tmp = [...this.buf];
+                tmp.sort((a, b) => a - b);
+                this.last_out = tmp[Math.floor(this.N / 2)];
+                return this.last_out;
+            }
+        }
+
+        class LPF2ndOrder {
+            constructor(fc, fs) {
+                this.init(fc, fs);
+            }
+            init(fc, fs) {
+                let w0 = 2.0 * Math.PI * fc / fs;
+                let cosw0 = Math.cos(w0);
+                let alpha = Math.sin(w0) / 1.4142;
+                let a0 = 1.0 + alpha;
+                this.b0 = ((1.0 - cosw0) / 2.0) / a0;
+                this.b1 = (1.0 - cosw0) / a0;
+                this.b2 = ((1.0 - cosw0) / 2.0) / a0;
+                this.a1 = (-2.0 * cosw0) / a0;
+                this.a2 = (1.0 - alpha) / a0;
+                this.x1 = 0.0; this.x2 = 0.0;
+                this.y1 = 0.0; this.y2 = 0.0;
+            }
+            update(x) {
+                let y = this.b0 * x + this.b1 * this.x1 + this.b2 * this.x2 - this.a1 * this.y1 - this.a2 * this.y2;
+                this.x2 = this.x1;
+                this.x1 = x;
+                this.y2 = this.y1;
+                this.y1 = y;
+                return y;
+            }
+        }
         // --- STATE & PARAMETERS ---
         let params = {
             K: 7.69, T: 1.32, L: 0.002, 
@@ -276,16 +344,22 @@
             Ksw: 0.5, 
             setpoint: 10, 
             setpointType: 'constant', // Loại tín hiệu đặt
-            noise: 0.2, // Biên độ nhiễu
+            noise: 0.05, // Biên độ nhiễu
             dt: 0.002
         };
+
+        // Khởi tạo các đối tượng bộ lọc (fs = 1/dt = 500Hz, cutoff freq = 20Hz)
+        let filterY_Med = new MedianFilter(7, 2.0);
+        let filterDY_Med = new MedianFilter(7, 10.0);
+        let filterY_LPF = new LPF2ndOrder(5.0, 1.0 / params.dt);
+        let filterDY_LPF = new LPF2ndOrder(2.0, 1.0 / params.dt);
 
         let isRunning = false;
         let animationFrameId = null;
         let lastRealTime = 0;
 
         let simState = { t: 0, y: 0, dy: 0, int_e: 0, e: 0, de: 0, S: 0, u_eq: 0, u_sw: 0, u: 0, int_sign_S: 0, y_d: 0 };
-        let simHistory = { u_history: [], data_t: [], data_y: [], data_yd: [], data_e: [], data_ueq: [], data_usw: [], data_s: [], data_u: [] };
+        let simHistory = { u_history: [], data_t: [], data_y: [], data_yd: [], data_dy: [], data_dyd: [], data_e: [], data_ueq: [], data_usw: [], data_s: [], data_u: [] };
 
         // --- DOM ELEMENTS ---
         const btnToggle = document.getElementById('btn-toggle');
@@ -304,7 +378,9 @@
             Ksw: document.getElementById('in-Ksw'),
             setpoint: document.getElementById('in-setpoint'),
             setpointType: document.getElementById('in-setpoint-type'),
-            noise: document.getElementById('in-noise')
+            noise: document.getElementById('in-noise'),
+            useMedian: document.getElementById('in-use-median'),
+            useLPF: document.getElementById('in-use-lpf')
         };
 
         const valDisplays = {
@@ -342,6 +418,7 @@
         };
 
         const wrapperY = document.getElementById('wrapperY');
+        const wrapperDY = document.getElementById('wrapperDY');
         const wrapperE = document.getElementById('wrapperE');
         const wrapperS = document.getElementById('wrapperS');
         const wrapperU = document.getElementById('wrapperU');
@@ -349,6 +426,7 @@
         const wrapperUsw = document.getElementById('wrapperUsw');
         
         const canvasY = document.getElementById('canvasY');
+        const canvasDY = document.getElementById('canvasDY');
         const canvasE = document.getElementById('canvasE');
         const canvasS = document.getElementById('canvasS');
         const canvasU = document.getElementById('canvasU');
@@ -356,6 +434,7 @@
         const canvasUsw = document.getElementById('canvasUsw');
         
         const ctxY = canvasY.getContext('2d');
+        const ctxDY = canvasDY.getContext('2d');
         const ctxE = canvasE.getContext('2d');
         const ctxS = canvasS.getContext('2d');
         const ctxU = canvasU.getContext('2d');
@@ -363,9 +442,12 @@
         const ctxUsw = canvasUsw.getContext('2d');
 
         function resizeCanvas() {
-            if (wrapperY && wrapperE && wrapperS && wrapperU && wrapperUeq && wrapperUsw) {
+            if (wrapperY && wrapperDY && wrapperE && wrapperS && wrapperU && wrapperUeq && wrapperUsw) {
                 canvasY.width = wrapperY.clientWidth;
                 canvasY.height = wrapperY.clientHeight;
+
+                canvasDY.width = wrapperDY.clientWidth;
+                canvasDY.height = wrapperDY.clientHeight;
                 
                 canvasE.width = wrapperE.clientWidth;
                 canvasE.height = wrapperE.clientHeight;
@@ -391,6 +473,8 @@
             inputs[key].addEventListener('input', (e) => {
                 if (key === 'setpointType') {
                     params[key] = e.target.value;
+                } else if (key === 'useMedian' || key === 'useLPF') {
+                    params[key] = e.target.checked;
                 } else {
                     let val = parseFloat(e.target.value);
                     if (isNaN(val)) val = 0;
@@ -440,10 +524,11 @@
             cancelAnimationFrame(animationFrameId);
 
             simState = { t: 0, y: 0, dy: 0, int_e: 0, e: 0, de: 0, S: 0, u_eq: 0, u_sw: 0, u: 0, int_sign_S: 0, y_d: params.setpointType === 'constant' ? params.setpoint : 0 };
-            simHistory = { u_history: [], data_t: [], data_y: [], data_yd: [], data_e: [], data_ueq: [], data_usw: [], data_s: [] };
+            simHistory = { u_history: [], data_t: [], data_y: [], data_yd: [], data_dy: [], data_dyd: [], data_e: [], data_ueq: [], data_usw: [], data_s: [], data_u: [] };
             
             updateUIData();
             ctxY.clearRect(0, 0, canvasY.width, canvasY.height);
+            ctxDY.clearRect(0, 0, canvasDY.width, canvasDY.height);
             ctxE.clearRect(0, 0, canvasE.width, canvasE.height);
             ctxS.clearRect(0, 0, canvasS.width, canvasS.height);
             ctxUeq.clearRect(0, 0, canvasUeq.width, canvasUeq.height);
@@ -498,8 +583,18 @@
             const noise_y = p.noise * (Math.random() - 0.5) * 2;
             const noise_dy = p.noise * (Math.random() - 0.5) * 10; 
             
-            const y_m = s.y + noise_y;
-            const dy_m = s.dy + noise_dy;
+            let y_m = s.y + noise_y;
+            let dy_m = s.dy + noise_dy;
+
+            // Áp dụng bộ lọc nếu được bật
+            if (p.useMedian) {
+                y_m = filterY_Med.update(y_m);
+                dy_m = filterDY_Med.update(dy_m);
+            }
+            if (p.useLPF) {
+                y_m = filterY_LPF.update(y_m);
+                dy_m = filterDY_LPF.update(dy_m);
+            }
 
             s.e = y_m - y_d;
             s.de = dy_m - dy_d;
@@ -545,6 +640,8 @@
             h.data_t.push(s.t);
             h.data_y.push(s.y);
             h.data_yd.push(y_d); // Lưu y_d thành mảng lịch sử thay vì số cố định
+            h.data_dy.push(s.dy);
+            h.data_dyd.push(dy_d);
             h.data_e.push(s.e);
             h.data_ueq.push(s.u_eq);
             h.data_usw.push(s.u_sw);
@@ -555,6 +652,8 @@
                 h.data_t.shift();
                 h.data_y.shift();
                 h.data_yd.shift();
+                h.data_dy.shift();
+                h.data_dyd.shift();
                 h.data_e.shift();
                 h.data_ueq.shift();
                 h.data_usw.shift();
@@ -664,7 +763,7 @@
                     
                     // Hiển thị số Y, tránh đè chữ ở vùng mép trên/dưới
                     if (py > 10 && py < height - 15) {
-                        ctx.fillText(tick.toFixed(1), 5, py);
+                        ctx.fillText(tick.toFixed(3), 5, py);
                     }
                 }
 
@@ -719,6 +818,7 @@
             if (h.data_t.length > 0) {
                 // Truyền h.data_yd làm đường Setpoint động
                 drawLineChart(ctxY, canvasY, h.data_t, h.data_y, '#3b82f6', h.data_yd);
+                drawLineChart(ctxDY, canvasDY, h.data_t, h.data_dy, '#38bdf8', h.data_dyd);
                 drawLineChart(ctxE, canvasE, h.data_t, h.data_e, '#f59e0b');
                 drawLineChart(ctxS, canvasS, h.data_t, h.data_s, '#a855f7');
                 drawLineChart(ctxU, canvasU, h.data_t, h.data_u, '#10b981');
